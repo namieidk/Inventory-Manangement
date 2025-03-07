@@ -8,6 +8,14 @@ if (!isset($_SESSION['username'])) {
     exit;
 }
 
+// Handle theme setting via AJAX
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'set_theme') {
+    $theme = $_POST['theme'] ?? 'light';
+    $_SESSION['theme'] = $theme;
+    echo json_encode(['status' => 'success', 'theme' => $theme]);
+    exit;
+}
+
 // Set timezone
 date_default_timezone_set('Asia/Manila');
 
@@ -132,7 +140,7 @@ for ($i = 0; $i < 7; $i++) {
         $daily_stmt->execute([':date' => $date]);
         $daily_sales[$date] = $daily_stmt->fetch(PDO::FETCH_ASSOC)['daily_total'] ?? 0.00;
     } catch (PDOException $e) {
-        $daily_sales[$date] = 0.00; // Default to 0 on error
+        $daily_sales[$date] = 0.00;
     }
 }
 
@@ -156,7 +164,7 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
         $week_label = "Week of " . date('M d', $week_start);
         $weekly_sales[$week_label] = $weekly_stmt->fetch(PDO::FETCH_ASSOC)['weekly_total'] ?? 0.00;
     } catch (PDOException $e) {
-        $weekly_sales[$week_label] = 0.00; // Default to 0 on error
+        $weekly_sales[$week_label] = 0.00;
     }
 }
 ?>
@@ -184,25 +192,57 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
             margin-top: 40px;
         }
 
-        /* Light Mode (default) */
+        /* Base styles */
         body {
             background-color: #f4f4f4;
             color: #333;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* Light Mode */
+        body.light-mode {
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .light-mode .left-sidebar {
+            background-color: #343F79;
+        }
+        .light-mode .left-sidebar .menu li a,
+        .light-mode .left-sidebar .menu li span,
+        .light-mode .left-sidebar .submenu li a {
+            color: white;
+            text-decoration: none;
+        }
+        .light-mode .left-sidebar .menu li:hover,
+        .light-mode .left-sidebar .menu li.dropdown.active {
+            background-color: #4a568a;
         }
         .light-mode .card {
             background-color: #fff;
             color: #333;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
+        .light-mode .main-content {
+            background-color: #f4f4f4;
+        }
 
-        /* Full Dark Mode */
+        /* Dark Mode */
         body.dark-mode {
             background-color: #1a1a1a;
             color: #e0e0e0;
         }
         .dark-mode .left-sidebar {
             background-color: #2c2c2c;
+        }
+        .dark-mode .left-sidebar .menu li a,
+        .dark-mode .left-sidebar .menu li span,
+        .dark-mode .left-sidebar .submenu li a {
             color: #e0e0e0;
+            text-decoration: none;
+        }
+        .dark-mode .left-sidebar .menu li:hover,
+        .dark-mode .left-sidebar .menu li.dropdown.active {
+            background-color: #3a3a3a;
         }
         .dark-mode .main-content {
             background-color: #252525;
@@ -246,7 +286,29 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
             border-color: #1e90ff;
         }
 
-        /* Enhanced dropdown styles for visibility in both modes */
+        /* Sidebar-specific styles */
+        .left-sidebar {
+            transition: background-color 0.3s;
+        }
+        .left-sidebar .menu {
+            list-style: none;
+            padding: 0;
+        }
+        .left-sidebar .menu li {
+            padding: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .left-sidebar .submenu {
+            display: none;
+            list-style: none;
+            padding-left: 20px;
+        }
+        .left-sidebar .menu li.dropdown.active .submenu {
+            display: block;
+        }
+
+        /* Settings menu */
         #logoutMenu {
             z-index: 1000;
             background-color: #ffffff;
@@ -254,9 +316,10 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
             border-radius: 5px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
             min-width: 120px;
+            position: absolute;
         }
         .dark-mode #logoutMenu {
-            background-color: #333; /* Dark background in dark mode */
+            background-color: #333;
             border: 1px solid #555;
         }
         #logoutMenu a {
@@ -266,54 +329,55 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
             display: block;
         }
         .dark-mode #logoutMenu a {
-            color: #e0e0e0; /* Light text in dark mode */
+            color: #e0e0e0;
         }
         #logoutMenu a:hover {
             background-color: #f0f0f0;
             color: #000;
         }
         .dark-mode #logoutMenu a:hover {
-            background-color: #444; /* Darker hover in dark mode */
+            background-color: #444;
             color: #fff;
         }
     </style>
 </head>
-<body>
+<body class="<?php echo isset($_SESSION['theme']) ? $_SESSION['theme'] . '-mode' : 'light-mode'; ?>">
     <div class="left-sidebar">
         <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
         <ul class="menu">
-            <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
-            <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
+            <li><i class="fa fa-home"></i><span><a href="dashboard.php"> Home</a></span></li>
+            <li><i class="fa fa-box"></i><span><a href="Inventory.php"> Inventory</a></span></li>
             <li class="dropdown">
                 <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
                 <ul class="submenu">
-                    <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
-                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
+                    <li><a href="supplier.php">Supplier</a></li>
+                    <li><a href="SupplierOrder.php">Supplier Order</a></li>
+                    <li><a href="Deliverytable.php">Delivery</a></li>
                 </ul>
             </li>
             <li class="dropdown">
                 <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
                 <ul class="submenu">
-                    <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
-                    <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                    <li><a href="Customers.php">Customers</a></li>
+                    <li><a href="Invoice.php">Invoice</a></li>
+                    <li><a href="CustomerOrder.php">Customer Order</a></li>
                 </ul>
             </li>
             <li class="dropdown">
                 <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
                 <ul class="submenu">
-                    <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                    <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
-                    <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
+                    <li><a href="UserManagement.php">User Management</a></li>
+                    <li><a href="Employees.php">Employees</a></li>
+                    <li><a href="AuditLogs.php">Audit Logs</a></li>
                 </ul>
             </li>
             <li>
-                <a href="Reports.php" style="text-decoration: none; color: inherit;">
+                <a href="Reports.php">
                     <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
                 </a>
             </li>
             <li>
-                <a href="logout.php" style="text-decoration: none; color: inherit;">
+                <a href="logout.php">
                     <i class="fas fa-sign-out-alt"></i><span> Log out</span>
                 </a>
             </li>
@@ -328,7 +392,7 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
                     <p><?php echo date('d F Y'); ?></p>
                 </div>
                 <div class="right-sidebar-toggle" style="display: flex; align-items: center;">
-                    <i class="fa fa-bell" style="margin-right: 20px; font-size: 30px; position: relative; top: -20px;"></i>
+                    <!-- Removed notification icon: <i class="fa fa-bell" style="margin-right: 20px; font-size: 30px; position: relative; top: -20px;"></i> -->
                     <div style="position: relative; display: inline-block;">
                         <i class="fa fa-cog" id="settingsIcon" style="margin-right: 20px; font-size: 30px; position: relative; top: -20px; cursor: pointer;"></i>
                         <div id="logoutMenu" style="display: none; position: absolute; top: 20px; right: 0;">
@@ -411,10 +475,10 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
             </div>
         </div>
         <div style="display: flex; align-items: center; margin-bottom: 20px; flex-direction: column;">
-            <input type="text" placeholder="Search" style="display: flex; align-items: center; padding: 10px 20px; background-color: white; color: black; border: none; border-radius: 5px; width: 230px; height: 35px;">
+            <input type="text" placeholder="Search" style="padding: 10px 20px; background-color: white; color: black; border: none; border-radius: 5px; width: 230px; height: 35px;">
             <div style="margin-top: 20px;">
-                <div class="right-card" style="color: black; font-size: 20px;">To be Shipped <br> <strong style="font-size: 30px;"><?php echo htmlspecialchars($to_be_shipped); ?></strong></div>
-                <div class="right-card" style="color: black; font-size: 20px;">To be Delivered <br> <strong style="font-size: 30px;"><?php echo htmlspecialchars($to_be_delivered); ?></strong></div>
+                <div class="right-card" style="font-size: 20px;">To be Shipped <br> <strong style="font-size: 30px;"><?php echo htmlspecialchars($to_be_shipped); ?></strong></div>
+                <div class="right-card" style="font-size: 20px;">To be Delivered <br> <strong style="font-size: 30px;"><?php echo htmlspecialchars($to_be_delivered); ?></strong></div>
             </div>
         </div>
     </div>
@@ -429,8 +493,10 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
             rightSidebar.style.overflowY = 'auto';
         }
 
+        // Sidebar dropdown toggle
         document.querySelectorAll('.dropdown').forEach(item => {
             item.addEventListener('click', function (e) {
+                e.stopPropagation(); // Prevent event bubbling
                 this.classList.toggle('active');
             });
         });
@@ -450,19 +516,42 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
             }
         });
 
-        // Mode toggle logic for full dark mode
+        // Theme toggle logic with session persistence
+        function setTheme(theme) {
+            fetch('dashboard.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `action=set_theme&theme=${theme}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Theme set response:', data); // Debug log
+                if (data.status === 'success') {
+                    document.body.classList.remove('light-mode', 'dark-mode');
+                    document.body.classList.add(`${data.theme}-mode`);
+                }
+            })
+            .catch(error => console.error('Error setting theme:', error));
+        }
+
         lightModeBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            document.body.classList.remove('dark-mode');
-            document.body.classList.add('light-mode');
+            setTheme('light');
             logoutMenu.style.display = 'none';
         });
 
         darkModeBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            document.body.classList.remove('light-mode');
-            document.body.classList.add('dark-mode');
+            setTheme('dark');
             logoutMenu.style.display = 'none';
+        });
+
+        // Apply saved theme on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = '<?php echo isset($_SESSION['theme']) ? $_SESSION['theme'] : 'light'; ?>';
+            console.log('Applying saved theme:', savedTheme); // Debug log
+            document.body.classList.remove('light-mode', 'dark-mode');
+            document.body.classList.add(`${savedTheme}-mode`);
         });
 
         // Chart.js setup

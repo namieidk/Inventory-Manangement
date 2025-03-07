@@ -10,54 +10,6 @@ ini_set('display_errors', 1);
 $filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : (isset($_GET['filterBy']) ? $_GET['filterBy'] : '');
 $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : (isset($_GET['orderBy']) ? $_GET['orderBy'] : '');
 
-// Handle form submission for editing
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'])) {
-    try {
-        $order_id = $_POST['order_id'];
-        $contact_person = $_POST['contact_person'];
-        $order_date = $_POST['order_date'];
-        $delivery_date = $_POST['delivery_date'];
-        $total = $_POST['total'];
-        $quantity = $_POST['quantity'];
-        $status = $_POST['status'];
-
-        $stmt = $conn->prepare("
-            UPDATE SupplierOrders 
-            SET SupplierName = :contact_person,
-                OrderDate = :order_date,
-                DeliveryDate = :delivery_date,
-                Total = :total,
-                Status = :status
-            WHERE OrderID = :order_id
-        ");
-        $stmt->execute([
-            ':order_id' => $order_id,
-            ':contact_person' => $contact_person,
-            ':order_date' => $order_date,
-            ':delivery_date' => $delivery_date,
-            ':total' => $total,
-            ':status' => $status
-        ]);
-
-        $stmt = $conn->prepare("
-            UPDATE SupplierOrderItems 
-            SET Quantity = :quantity
-            WHERE OrderID = :order_id
-        ");
-        $stmt->execute([
-            ':quantity' => $quantity,
-            ':order_id' => $order_id
-        ]);
-
-        echo 'success';
-        exit();
-    } catch (PDOException $e) {
-        header('HTTP/1.1 500 Internal Server Error');
-        echo "Error updating order: " . $e->getMessage();
-        exit();
-    }
-}
-
 // Handle AJAX request for order details
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['get_details']) && isset($_GET['order_id'])) {
     try {
@@ -244,12 +196,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             transform: translateY(-50%);
             color: #6c757d;
         }
-        .success-notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1050;
-        }
         .order-link {
             cursor: pointer;
             color: #007bff;
@@ -284,12 +230,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     <ul class="menu">
         <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
         <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
-        <li><i class="fa fa-credit-card"></i><span><a href="Payment.php" style="color: white; text-decoration: none;"> Payment</a></span></li>
         <li class="dropdown">
             <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
             <ul class="submenu">
                 <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
                 <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
+                <li><a href="Deliverytable.php">Delivery</a></li>
             </ul>
         </li>
         <li class="dropdown">
@@ -311,6 +257,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         <li>
             <a href="Reports.php" style="text-decoration: none; color: inherit;">
                 <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
+            </a>
+        </li>
+        <li>
+            <a href="logout.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-sign-out-alt"></i><span> Log out</span>
             </a>
         </li>
     </ul>
@@ -365,57 +316,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <!-- Populated via AJAX -->
         </tbody>
     </table>
-
-    <!-- Edit Modal -->
-    <div class="modal fade" id="editOrderModal" tabindex="-1" aria-labelledby="editOrderModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="editOrderModalLabel">Edit Supplier Order</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <form id="editOrderForm" method="POST">
-                    <div class="modal-body">
-                        <input type="hidden" name="order_id" id="editOrderId">
-                        <div class="mb-3">
-                            <label for="editContactPerson" class="form-label">Supplier Name</label>
-                            <input type="text" class="form-control" id="editContactPerson" name="contact_person" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="editOrderDate" class="form-label">Order Date</label>
-                            <input type="date" class="form-control" id="editOrderDate" name="order_date" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="editDeliveryDate" class="form-label">Delivery Date</label>
-                            <input type="date" class="form-control" id="editDeliveryDate" name="delivery_date" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="editTotal" class="form-label">Total</label>
-                            <input type="number" class="form-control" id="editTotal" name="total" step="0.01" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="editQuantity" class="form-label">Quantity</label>
-                            <input type="number" class="form-control" id="editQuantity" name="quantity" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="editStatus" class="form-label">Status</label>
-                            <select class="form-control" id="editStatus" name="status">
-                                <option value="Pending">Pending</option>
-                                <option value="Processing">Processing</option>
-                                <option value="Shipped">Shipped</option>
-                                <option value="Delivered">Delivered</option>
-                                <option value="Cancelled">Cancelled</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="submit" class="btn btn-primary">Save changes</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
 
     <!-- Details Modal -->
     <div class="modal fade" id="orderDetailsModal" tabindex="-1" aria-labelledby="orderDetailsModalLabel" aria-hidden="true">
@@ -519,16 +419,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td>${order.Status || ''}</td>
                                 <td>${order.DeliveryDate || ''}</td>
                                 <td>
-                                    <button class="btn btn-sm btn-primary edit-btn" 
+                                    <button class="btn btn-sm btn-success delivery-btn" 
                                             data-order-id="${order.OrderID}"
-                                            data-contact="${order.ContactPerson}"
-                                            data-date="${order.OrderDate}"
-                                            data-delivery="${order.DeliveryDate}"
-                                            data-total="${order.Total}"
-                                            data-quantity="${order.TotalQuantity}"
-                                            data-status="${order.Status}"
-                                            title="Edit Order">
-                                        <i class="fas fa-edit"></i>
+                                            title="View Delivery">
+                                        <i class="fas fa-truck"></i>
                                     </button>
                                 </td>
                             </tr>
@@ -544,7 +438,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.querySelector('select[name="filterBy"]').value = filterBy;
 
                 // Reattach event listeners
-                attachEditButtonListeners();
+                attachDeliveryButtonListeners();
                 attachOrderLinkListeners();
             },
             error: function(xhr, status, error) {
@@ -562,7 +456,6 @@ document.addEventListener('DOMContentLoaded', function() {
         searchTimeout = setTimeout(updateTable, 300); // Debounce 300ms
     });
 
-    // Ensure dropdowns trigger table updates
     document.querySelector('select[name="orderBy"]').addEventListener('change', function() {
         console.log('Order By selected:', this.value); // Debug
         updateTable();
@@ -576,62 +469,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initial table load
     updateTable();
 
-    // Edit button functionality
-    function attachEditButtonListeners() {
-        document.querySelectorAll('.edit-btn').forEach(button => {
+    // Delivery button functionality
+    function attachDeliveryButtonListeners() {
+        document.querySelectorAll('.delivery-btn').forEach(button => {
             button.addEventListener('click', function() {
                 const orderId = this.getAttribute('data-order-id');
-                const contact = this.getAttribute('data-contact');
-                const orderDate = this.getAttribute('data-date');
-                const deliveryDate = this.getAttribute('data-delivery');
-                const total = this.getAttribute('data-total');
-                const quantity = this.getAttribute('data-quantity');
-                const status = this.getAttribute('data-status');
-
-                document.getElementById('editOrderId').value = orderId || '';
-                document.getElementById('editContactPerson').value = contact || '';
-                document.getElementById('editOrderDate').value = orderDate || '';
-                document.getElementById('editDeliveryDate').value = deliveryDate || '';
-                document.getElementById('editTotal').value = total || '';
-                document.getElementById('editQuantity').value = quantity || '';
-                document.getElementById('editStatus').value = status || '';
-
-                const modal = new bootstrap.Modal(document.getElementById('editOrderModal'));
-                modal.show();
+                window.location.href = `Delivery.php?order_id=${orderId}`;
             });
         });
     }
-
-    // Form submission for editing
-    document.getElementById('editOrderForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        fetch('SupplierOrder.php', {
-            method: 'POST',
-            body: new FormData(this)
-        })
-        .then(response => response.text())
-        .then(data => {
-            if (data === 'success') {
-                const notification = document.createElement('div');
-                notification.className = 'success-notification alert alert-success alert-dismissible fade show';
-                notification.innerHTML = `
-                    Order updated successfully
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                `;
-                document.body.appendChild(notification);
-                const modal = bootstrap.Modal.getInstance(document.getElementById('editOrderModal'));
-                modal.hide();
-                setTimeout(() => notification.remove(), 3000);
-                updateTable();
-            } else {
-                throw new Error(data);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Failed to update order: ' + error.message);
-        });
-    });
 
     // Order details link functionality
     function attachOrderLinkListeners() {

@@ -101,37 +101,42 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <div class="left-sidebar">
     <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
     <ul class="menu">
-        <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
-        <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
-        <li><i class="fa fa-credit-card"></i><span><a href="Payment.php" style="color: white; text-decoration: none;"> Payment</a></span></li>
-        <li class="dropdown">
-            <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
-            <ul class="submenu">
-                <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
-                <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
-            </ul>
-        </li>
-        <li class="dropdown">
-            <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
-            <ul class="submenu">
-                <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
-                <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
-            </ul>
-        </li>
-        <li class="dropdown">
-            <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
-            <ul class="submenu">
-                <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management</a></li>
-                <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
-                <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
-            </ul>
-        </li>
-        <li>
-            <a href="Reports.php" style="text-decoration: none; color: inherit;">
-                <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
-            </a>
-        </li>
+    <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
+            <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
+            <li class="dropdown">
+                <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
+                <ul class="submenu">
+                    <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
+                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
+                    <li><a href="Deliverytable.php">Delivery</a></li>
+                </ul>
+            </li>
+            <li class="dropdown">
+                <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
+                <ul class="submenu">
+                    <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
+                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                    <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                </ul>
+            </li>
+            <li class="dropdown">
+                <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
+                <ul class="submenu">
+                    <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
+                    <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
+                    <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
+                </ul>
+            </li>
+            <li>
+                <a href="Reports.php" style="text-decoration: none; color: inherit;">
+                    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
+                </a>
+            </li>
+            <li>
+                <a href="logout.php" style="text-decoration: none; color: inherit;">
+                    <i class="fas fa-sign-out-alt"></i><span> Log out</span>
+                </a>
+            </li>
     </ul>
 </div>
 
