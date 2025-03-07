@@ -1,0 +1,178 @@
+
+body {
+    display: flex;
+    font-family: Arial, sans-serif;
+    background: #f4f4f4;
+    margin: 0;
+}
+
+.left-sidebar {
+    width: 250px;
+    background: #343F79;
+    color: white;
+    height: 100vh;
+    padding: 20px;
+    position: fixed;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-y: auto;
+}
+
+.logo {
+    width: 138px;
+    height: 138px;
+    object-fit: cover;
+    border-radius: 50%;
+    margin-bottom: 20px;
+}
+
+.menu {
+    list-style: none;
+    padding: 0;
+    width: 100%;
+}
+
+.menu li {
+    padding: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    position: relative;
+    transition: background-color 0.3s ease;
+}
+
+.menu li i {
+    margin-right: 8px;
+}
+
+.menu li:hover {
+    background: #3e4a8c;
+}
+
+
+.dropdown {
+    position: relative;
+    width: 100%;
+}
+
+.toggle-btn {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+}
+
+.submenu {
+    display: none;
+    list-style: none;
+    padding-left: 0;
+    margin-top: 5px;
+}
+
+.submenu li {
+    padding: 10px 15px;
+    background: #435299;
+    border-left: 3px solid #1abc9c;
+    margin-left: 10px; 
+    transition: background-color 0.3s ease;
+}
+
+.submenu li:hover {
+    background-color: #5264b3;
+    color: white;
+}
+
+.dropdown.active .submenu {
+    display: block;
+}
+
+.main-content {
+    margin-left: 250px; 
+    padding: 20px;
+    width: calc(100% - 250px); 
+    transition: width 0.3s;
+}
+
+.main-content.right-sidebar-open {
+    width: calc(100% - 510px);
+}
+
+.cards {
+    display: flex;
+    gap: 20px;
+}
+
+.card {
+    background: white;
+    padding: 20px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    flex: 1;
+    text-align: center;
+}
+
+.right-card {
+    width: 200px;
+    height: 105px;
+    background: white;
+    padding: 20px;
+    box-shadow: 0 2px 5px #FFFFFF;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.graph-placeholder {
+    background: white;
+    height: 200px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    margin-top: 20px;
+}
+
+.inventory-summary {
+    background: white;
+    padding: 20px;
+    margin-top: 20px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+table {
+    width: 100%;
+    background: white;
+    margin-top: 20px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+th {
+    background: #34495e;
+    color: white;
+}
+
+.search-container {
+    position: relative;
+    width: 30%;
+}
+
+.search-container input {
+    width: 100%;
+    padding-left: 30px;
+}
+
+.search-container .fa-search {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #aaa;
+}
