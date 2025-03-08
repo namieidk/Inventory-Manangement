@@ -4,8 +4,11 @@ include '../database/utils.php'; // Include database connection
 session_start(); // Start session
 
 $userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
-logAction($conn, $userId, "Accessed Invoice Page", "User accessed the invoice page");
-
+// Only log if last log was more than X seconds ago
+if (!isset($_SESSION['last_invoice_log']) || (time() - $_SESSION['last_invoice_log']) > 300) { // 300 seconds = 5 minutes
+    logAction($conn, $userId, "Accessed Invoice Page", "User accessed the invoice page");
+    $_SESSION['last_invoice_log'] = time();
+}
 // Placeholder for fetching invoices
 $invoices = [];
 
@@ -20,7 +23,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         // Start a transaction
         $conn->beginTransaction();
 
-        // Main invoice details
+        // Main invoice details with serial number
+        $serial_number = $_POST['serial_number'] ?? '';
         $payment_type = $_POST['payment_type'] ?? '';
         $client_name = $_POST['charge_to'] ?? '';
         $date = $_POST['date'] ?? '';
@@ -29,7 +33,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         $total_amount = 0.00; // We'll calculate this from items
 
         // Validate required fields
-        if (empty($client_name) || empty($date) || empty($payment_terms) || empty($payment_type)) {
+        if (empty($serial_number) || empty($client_name) || empty($date) || empty($payment_terms) || empty($payment_type)) {
             throw new Exception("All required fields must be filled.");
         }
 
@@ -40,11 +44,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
             }
         }
 
-        // Insert into Invoice table
-        $sql = "INSERT INTO Invoice (payment_type, client_name, date, tin, payment_terms, total_amount) 
-                VALUES (?, ?, ?, ?, ?, ?)";
+        // Insert into Invoice table with serial number
+        $sql = "INSERT INTO Invoice (serial_number, payment_type, client_name, date, tin, payment_terms, total_amount) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($sql);
-        $stmt->execute([$payment_type, $client_name, $date, $tin, $payment_terms, $total_amount]);
+        $stmt->execute([$serial_number, $payment_type, $client_name, $date, $tin, $payment_terms, $total_amount]);
         $invoice_id = $conn->lastInsertId();
 
         // Insert invoice items
@@ -102,6 +106,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['a
 
         $sql = "SELECT 
                     i.id,
+                    i.serial_number,
                     i.payment_type,
                     i.client_name,
                     i.total_amount,
@@ -114,7 +119,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['a
         $params = [];
 
         if (!empty($searchTerm)) {
-            $sql .= " AND (i.id LIKE :search 
+            $sql .= " AND (i.serial_number LIKE :search 
+                        OR i.id LIKE :search 
                         OR i.client_name LIKE :search 
                         OR i.payment_type LIKE :search 
                         OR i.payment_terms LIKE :search)";
@@ -135,7 +141,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['a
             }
         }
 
-        $sql .= " GROUP BY i.id, i.payment_type, i.client_name, i.total_amount, i.payment_terms, i.date";
+        $sql .= " GROUP BY i.id, i.serial_number, i.payment_type, i.client_name, i.total_amount, i.payment_terms, i.date";
 
         if ($orderBy) {
             switch ($orderBy) {
@@ -181,6 +187,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['a
 try {
     $sql = "SELECT 
                 i.id,
+                i.serial_number,
                 i.payment_type,
                 i.client_name,
                 i.total_amount,
@@ -189,7 +196,7 @@ try {
                 COUNT(ii.id) as item_count
             FROM Invoice i
             LEFT JOIN InvoiceItems ii ON i.id = ii.invoice_id
-            GROUP BY i.id, i.payment_type, i.client_name, i.total_amount, i.payment_terms, i.date
+            GROUP BY i.id, i.serial_number, i.payment_type, i.client_name, i.total_amount, i.payment_terms, i.date
             ORDER BY i.date DESC";
     $stmt = $conn->prepare($sql);
     $stmt->execute();
@@ -297,7 +304,6 @@ try {
                 <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
                 <ul class="submenu">
                     <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                    <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
                     <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
                 </ul>
             </li>
@@ -346,6 +352,7 @@ try {
     <table class="table table-striped table-hover" id="invoiceTable">
         <thead>
             <tr>
+                <th>S.No</th> <!-- Added Serial Number column -->
                 <th>Invoice#</th>
                 <th>Order#</th>
                 <th>Payment Type</th>
@@ -358,11 +365,12 @@ try {
         <tbody id="invoiceTableBody">
             <?php if (empty($invoices)): ?>
                 <tr>
-                    <td colspan="7" class="text-center text-muted">No invoice available. Input new invoice.</td>
+                    <td colspan="8" class="text-center text-muted">No invoice available. Input new invoice.</td>
                 </tr>
             <?php else: ?>
                 <?php foreach ($invoices as $invoice): ?>
                     <tr>
+                        <td><?php echo htmlspecialchars($invoice['serial_number']); ?></td> <!-- Display Serial Number -->
                         <td><?php echo htmlspecialchars($invoice['id']); ?></td>
                         <td>
                             <span class="order-link" data-invoice-id="<?php echo $invoice['id']; ?>" data-bs-toggle="modal" data-bs-target="#itemsModal">
@@ -390,6 +398,12 @@ try {
                 </div>
                 <form id="newInvoiceForm" method="post">
                     <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label for="serialNumber" class="form-label">Serial Number</label>
+                                <input type="text" class="form-control" id="serialNumber" name="serial_number" required>
+                            </div>
+                        </div>
                         <div class="row mb-3">
                             <div class="col-md-12">
                                 <label for="paymentType" class="form-label">Payment Type</label>
@@ -573,18 +587,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 tbody.innerHTML = '';
 
                 if (invoices.error) {
-                    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">${invoices.error}</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">${invoices.error}</td></tr>`;
                     return;
                 }
 
                 if (invoices.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No invoice available. Input new invoice.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No invoice available. Input new invoice.</td></tr>';
                     return;
                 }
 
                 invoices.forEach(invoice => {
                     const row = `
                         <tr>
+                            <td>${invoice.serial_number || ''}</td>
                             <td>${invoice.id}</td>
                             <td><span class="order-link" data-invoice-id="${invoice.id}" data-bs-toggle="modal" data-bs-target="#itemsModal">${invoice.item_count}</span></td>
                             <td>${invoice.payment_type || ''}</td>
@@ -602,7 +617,7 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             error: function(xhr, status, error) {
                 console.error('AJAX error:', status, error);
-                document.getElementById('invoiceTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error loading invoices</td></tr>';
+                document.getElementById('invoiceTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error loading invoices</td></tr>';
             }
         });
     }

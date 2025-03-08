@@ -1,7 +1,14 @@
 <?php
 include '../database/database.php';
+include '../database/utils.php';
 session_start();
 
+$userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
+// Only log if last log was more than X seconds ago
+if (!isset($_SESSION['last_UserManagement_log']) || (time() - $_SESSION['last_UserManagement_log']) > 300) { // 300 seconds = 5 minutes
+    logAction($conn, $userId, "Accessed User Management Page", "User accessed the User Management page");
+    $_SESSION['last_UserManagement_log'] = time();
+}
 // Enable error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -196,7 +203,6 @@ if (isset($users['error'])) {
             <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
             <ul class="submenu">
                 <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
                 <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
             </ul>
         </li>

@@ -1,6 +1,6 @@
 <?php
 include '../database/database.php';
-session_start();
+
 
 $error_message = "";
 

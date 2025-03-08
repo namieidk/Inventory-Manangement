@@ -1,7 +1,14 @@
 <?php
 include '../database/database.php';
+include '../database/utils.php';
 session_start();
 
+$userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
+// Only log if last log was more than X seconds ago
+if (!isset($_SESSION['last_NewSupplierOrder_log']) || (time() - $_SESSION['last_NewSupplierOrder_log']) > 300) { // 300 seconds = 5 minutes
+    logAction($conn, $userId, "Accessed New Supplier Order Page", "User accessed the New Supplier Order page");
+    $_SESSION['last_NewSupplierOrder_log'] = time();
+}
 // Fetch products for the dropdown
 try {
     $stmt = $conn->prepare("SELECT id, product_name, price FROM products WHERE status = 'active'");

@@ -4,7 +4,15 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 include '../database/database.php'; // Uses your PDO connection
+include '../database/utils.php';
 session_start();
+
+$userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
+// Only log if last log was more than X seconds ago
+if (!isset($_SESSION['last_NewCustomer_log']) || (time() - $_SESSION['last_NewCustomer_log']) > 300) { // 300 seconds = 5 minutes
+    logAction($conn, $userId, "Accessed New Customer Page", "User accessed the New Customers page");
+    $_SESSION['last_NewCustomer_log'] = time();
+}
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Ensure PDO connection is available

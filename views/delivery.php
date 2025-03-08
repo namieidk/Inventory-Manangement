@@ -1,7 +1,14 @@
 <?php
 include '../database/database.php';
+include '../database/utils.php';
 session_start();
 
+$userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
+// Only log if last log was more than X seconds ago
+if (!isset($_SESSION['last_delivery_log']) || (time() - $_SESSION['last_delivery_log']) > 300) { // 300 seconds = 5 minutes
+    logAction($conn, $userId, "Accessed delivery Page", "User accessed the delivery page");
+    $_SESSION['last_delivery_log'] = time();
+}
 // Enable error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', 1);

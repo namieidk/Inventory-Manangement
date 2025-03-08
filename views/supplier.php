@@ -1,14 +1,20 @@
 <?php
 include '../database/database.php';
+include '../database/utils.php';
 session_start();
 
+$userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
+// Only log if last log was more than X seconds ago
+if (!isset($_SESSION['last_Supplier_log']) || (time() - $_SESSION['last_Supplier_log']) > 300) { // 300 seconds = 5 minutes
+    logAction($conn, $userId, "Accessed Supplier Page", "User accessed the Supplier page");
+    $_SESSION['last_Supplier_log'] = time();
+}
 // Enable error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// Define $orderBy and $filterBy globally with default empty values
+// Define $orderBy globally with default empty value
 $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : (isset($_GET['orderBy']) ? $_GET['orderBy'] : '');
-$filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : (isset($_GET['filterBy']) ? $_GET['filterBy'] : '');
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST['supplier_id'])) {
@@ -54,8 +60,8 @@ if (isset($_GET['supplier_id'])) {
     exit;
 }
 
-// Unified fetch function for suppliers
-function fetchSuppliers($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
+// Unified fetch function for suppliers (removed filterBy)
+function fetchSuppliers($conn, $searchTerm = '', $orderBy = '') {
     try {
         $sql = "SELECT * FROM Supplier WHERE 1=1";
         $params = [];
@@ -69,24 +75,6 @@ function fetchSuppliers($conn, $searchTerm = '', $orderBy = '', $filterBy = '') 
                         OR Email LIKE :search 
                         OR SupplierID LIKE :search)";
             $params[':search'] = "%$searchTerm%";
-        }
-
-        // Filter logic (example: filter by PaymentTerms)
-        switch ($filterBy) {
-            case 'payment-net-30':
-                $sql .= " AND PaymentTerms = 'Net 30'";
-                break;
-            case 'payment-net-60':
-                $sql .= " AND PaymentTerms = 'Net 60'";
-                break;
-            case 'has-email':
-                $sql .= " AND Email IS NOT NULL AND Email != ''";
-                break;
-            case 'no-email':
-                $sql .= " AND (Email IS NULL OR Email = '')";
-                break;
-            default:
-                break;
         }
 
         // Order logic
@@ -120,12 +108,11 @@ function fetchSuppliers($conn, $searchTerm = '', $orderBy = '', $filterBy = '') 
     }
 }
 
-// Handle AJAX search request
+// Handle AJAX search request (removed filterBy)
 if (isset($_POST['action']) && $_POST['action'] === 'search') {
     $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
     $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
-    $filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : '';
-    $suppliers = fetchSuppliers($conn, $searchTerm, $orderBy, $filterBy);
+    $suppliers = fetchSuppliers($conn, $searchTerm, $orderBy);
     header('Content-Type: application/json');
     echo json_encode($suppliers);
     exit;
@@ -133,7 +120,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'search') {
 
 // Initial page load
 $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
-$suppliers = fetchSuppliers($conn, $searchTerm, $orderBy, $filterBy);
+$suppliers = fetchSuppliers($conn, $searchTerm, $orderBy);
 if (isset($suppliers['error'])) {
     $error = $suppliers['error'];
     $suppliers = [];
@@ -194,7 +181,7 @@ if (isset($suppliers['error'])) {
         .search-container {
             position: relative;
             width: 300px;
-            margin-right: 550px;
+            margin-right: 780px;
             margin-left: 40px;
         }
         .search-container .form-control {
@@ -234,42 +221,41 @@ if (isset($suppliers['error'])) {
 <div class="left-sidebar">
     <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
     <ul class="menu">
-    <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
-            <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
-                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
-                    <li><a href="Deliverytable.php">Delivery</a></li>
-                </ul>
-            </li>
-            <li class="dropdown">
-                <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
-                    <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
-                </ul>
-            </li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                    <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
-                    <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
-                </ul>
-            </li>
-            <li>
-                <a href="Reports.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
-                </a>
-            </li>
-            <li>
-                <a href="logout.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-sign-out-alt"></i><span> Log out</span>
-                </a>
-            </li>
+        <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
+        <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
+                <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
+                <li><a href="Deliverytable.php">Delivery</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+            <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
+                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
+                <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
+            </ul>
+        </li>
+        <li>
+            <a href="Reports.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
+            </a>
+        </li>
+        <li>
+            <a href="logout.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-sign-out-alt"></i><span> Log out</span>
+            </a>
+        </li>
     </ul>
 </div>
 
@@ -285,20 +271,13 @@ if (isset($suppliers['error'])) {
             <input type="text" class="form-control" id="searchInput" name="search" placeholder="Search..." value="<?php echo htmlspecialchars($searchTerm); ?>">
         </div>
         <button class="btn btn-dark mr-2" id="newProductBtn" style="margin-right: 10px;">New <i class="fa fa-plus"></i></button>
-        <form name="filterForm" id="filterForm" method="post" class="d-flex align-items-center">
+        <form name="orderForm" id="orderForm" method="post" class="d-flex align-items-center">
             <select class="btn btn-outline-secondary mr-2" style="margin-right: 10px;" name="orderBy" id="orderBySelect" onchange="updateTable()">
                 <option value="">Order By</option>
                 <option value="name-asc" <?php if ($orderBy === 'name-asc') echo 'selected'; ?>>Ascending (A → Z)</option>
                 <option value="name-desc" <?php if ($orderBy === 'name-desc') echo 'selected'; ?>>Descending (Z → A)</option>
                 <option value="newest" <?php if ($orderBy === 'newest') echo 'selected'; ?>>Newest</option>
                 <option value="oldest" <?php if ($orderBy === 'oldest') echo 'selected'; ?>>Oldest</option>
-            </select>
-            <select class="btn btn-outline-secondary" name="filterBy" id="filterBySelect" onchange="updateTable()">
-                <option value="">Filtered By</option>
-                <option value="payment-net-30" <?php if ($filterBy === 'payment-net-30') echo 'selected'; ?>>Payment Terms: Net 30</option>
-                <option value="payment-net-60" <?php if ($filterBy === 'payment-net-60') echo 'selected'; ?>>Payment Terms: Net 60</option>
-                <option value="has-email" <?php if ($filterBy === 'has-email') echo 'selected'; ?>>Has Email</option>
-                <option value="no-email" <?php if ($filterBy === 'no-email') echo 'selected'; ?>>No Email</option>
             </select>
         </form>
     </div>
@@ -511,9 +490,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateTable() {
         const searchTerm = searchInput.value.trim();
         const orderBy = document.querySelector('select[name="orderBy"]').value;
-        const filterBy = document.querySelector('select[name="filterBy"]').value;
 
-        console.log('Updating table with:', { searchTerm, orderBy, filterBy }); // Debug
+        console.log('Updating table with:', { searchTerm, orderBy }); // Debug
 
         $.ajax({
             url: 'supplier.php',
@@ -522,8 +500,7 @@ document.addEventListener('DOMContentLoaded', function() {
             data: {
                 action: 'search',
                 search: searchTerm,
-                orderBy: orderBy,
-                filterBy: filterBy
+                orderBy: orderBy
             },
             success: function(suppliers) {
                 console.log('Suppliers received:', suppliers); // Debug log
@@ -562,9 +539,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No supplier available. Input new supplier.</td></tr>';
                 }
 
-                // Update the select elements to reflect current values
+                // Update the select element to reflect current value
                 document.querySelector('select[name="orderBy"]').value = orderBy;
-                document.querySelector('select[name="filterBy"]').value = filterBy;
             },
             error: function(xhr, status, error) {
                 console.error('AJAX error:', status, error);
@@ -579,14 +555,9 @@ document.addEventListener('DOMContentLoaded', function() {
         searchTimeout = setTimeout(updateTable, 300); // 300ms debounce
     });
 
-    // Ensure dropdowns trigger table updates
+    // Ensure dropdown triggers table updates
     document.querySelector('select[name="orderBy"]').addEventListener('change', function() {
         console.log('Order By selected:', this.value); // Debug
-        updateTable();
-    });
-
-    document.querySelector('select[name="filterBy"]').addEventListener('change', function() {
-        console.log('Filter By selected:', this.value); // Debug
         updateTable();
     });
 

@@ -1,6 +1,14 @@
 <?php
 include '../database/database.php';
+include '../database/utils.php';
 session_start();
+
+$userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
+// Only log if last log was more than X seconds ago
+if (!isset($_SESSION['last_dashboard_log']) || (time() - $_SESSION['last_dashboard_log']) > 300) { // 300 seconds = 5 minutes
+    logAction($conn, $userId, "Accessed dashboard Page", "User accessed the dashboard page");
+    $_SESSION['last_dashboard_log'] = time();
+}
 
 if (!isset($_SESSION['username'])) {
     header('Location: Login.php');
@@ -367,7 +375,6 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
                 <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
                 <ul class="submenu">
                     <li><a href="UserManagement.php">User Management</a></li>
-                    <li><a href="Employees.php">Employees</a></li>
                     <li><a href="AuditLogs.php">Audit Logs</a></li>
                 </ul>
             </li>
@@ -377,10 +384,10 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
                 </a>
             </li>
             <li>
-                <a href="logout.php">
-                    <i class="fas fa-sign-out-alt"></i><span> Log out</span>
-                </a>
-            </li>
+    <a href="../views/Login.php" >
+        <i class="fas fa-sign-out-alt"></i><span> Log out</span>
+    </a>
+</li>
         </ul>
     </div>
 

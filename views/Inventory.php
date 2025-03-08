@@ -1,7 +1,15 @@
 <?php
 include '../database/database.php';
+include '../database/utils.php';
 session_start();
 
+$userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
+// Only log if last log was more than X seconds ago
+if (!isset($_SESSION['last_inventory_log']) || (time() - $_SESSION['last_inventory_log']) > 300) { // 300 seconds = 5 minutes
+    logAction($conn, $userId, "Accessed Inventory Page", "User accessed the inventory page");
+    $_SESSION['last_inventory_log'] = time();
+}
+$invoices = [];
 // Enable error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -311,7 +319,6 @@ if (isset($products['error'])) {
             <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
             <ul class="submenu">
                 <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
                 <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
             </ul>
         </li>
