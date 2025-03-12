@@ -17,7 +17,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'])) {
         $order_date = $_POST['order_date'];
         $delivery_date = $_POST['delivery_date'];
         $total = $_POST['total'];
-        $quantity = $_POST['quantity'];
         $status = $_POST['status'];
 
         // Begin transaction for consistency across CustomerOrders and Inventory updates
@@ -40,17 +39,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'])) {
             ':delivery_date' => $delivery_date,
             ':total' => $total,
             ':status' => $status
-        ]);
-
-        // Update CustomerOrderItems table
-        $stmt = $conn->prepare("
-            UPDATE CustomerOrderItems 
-            SET Quantity = :quantity
-            WHERE OrderID = :order_id
-        ");
-        $stmt->execute([
-            ':quantity' => $quantity,
-            ':order_id' => $order_id
         ]);
 
         // If status changes to "Delivered", update inventory stock
@@ -145,10 +133,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 co.Total,
                 co.SubTotal,
                 co.Discount,
-                SUM(coi.Quantity) AS TotalQuantity,
                 co.Status
             FROM CustomerOrders co
-            LEFT JOIN CustomerOrderItems coi ON co.OrderID = coi.OrderID
             WHERE 1=1
         ";
         
@@ -176,10 +162,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     break;
             }
         }
-
-        $query .= "
-            GROUP BY co.OrderID, co.CustomerName, co.OrderDate, co.DeliveryDate, co.Total, co.SubTotal, co.Discount, co.Status
-        ";
 
         $valid_order_columns = ['OrderID', 'CustomerName', 'OrderDate', 'Total', 'Status'];
         $order_column = in_array($order_by, $valid_order_columns) ? $order_by : 'OrderDate';
@@ -216,10 +198,8 @@ $query = "
         co.Total,
         co.SubTotal,
         co.Discount,
-        SUM(coi.Quantity) AS TotalQuantity,
         co.Status
     FROM CustomerOrders co
-    LEFT JOIN CustomerOrderItems coi ON co.OrderID = coi.OrderID
     WHERE 1=1
 ";
 
@@ -252,10 +232,6 @@ if ($filter) {
 if (!empty($where_clauses)) {
     $query .= " WHERE " . implode(" AND ", $where_clauses);
 }
-
-$query .= "
-    GROUP BY co.OrderID, co.CustomerName, co.OrderDate, co.DeliveryDate, co.Total, co.SubTotal, co.Discount, co.Status
-";
 
 $valid_order_columns = ['OrderID', 'CustomerName', 'OrderDate', 'Total', 'Status'];
 $order_column = in_array($order_by, $valid_order_columns) ? $order_by : 'OrderDate';
@@ -350,41 +326,41 @@ try {
 <div class="left-sidebar">
     <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
     <ul class="menu">
-    <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
-            <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
-                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
-                    <li><a href="Deliverytable.php">Delivery</a></li>
-                </ul>
-            </li>
-            <li class="dropdown">
-                <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
-                    <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
-                </ul>
-            </li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                    <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
-                </ul>
-            </li>
-            <li>
-                <a href="Reports.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
-                </a>
-            </li>
-            <li>
-                <a href="logout.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-sign-out-alt"></i><span> Log out</span>
-                </a>
-            </li>
+        <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
+        <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
+                <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
+                <li><a href="Deliverytable.php">Delivery</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+            <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
+                <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
+                <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
+            </ul>
+        </li>
+        <li>
+            <a href="Reports.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
+            </a>
+        </li>
+        <li>
+            <a href="logout.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-sign-out-alt"></i><span> Log out</span>
+            </a>
+        </li>
     </ul>
 </div>
 
@@ -430,10 +406,8 @@ try {
     <table class="table table-striped table-hover" id="ordersTable">
         <thead>
             <tr>
-                <th>Customer ID</th>
+                <th>Customer Order ID</th>
                 <th>Contact Person</th>
-                <th>Order#</th>
-                <th>Quantity</th>
                 <th>Total</th>
                 <th>Status</th>
                 <th>Delivery Date</th>
@@ -442,14 +416,12 @@ try {
         </thead>
         <tbody id="orderTableBody">
             <?php if (isset($error) && empty($orders)): ?>
-                <tr><td colspan="8" class="text-center text-danger"><?= htmlspecialchars($error) ?></td></tr>
+                <tr><td colspan="6" class="text-center text-danger"><?= htmlspecialchars($error) ?></td></tr>
             <?php elseif (!empty($orders)): ?>
                 <?php foreach ($orders as $order): ?>
                     <tr>
                         <td><?= htmlspecialchars($order['OrderID']) ?></td>
                         <td><?= htmlspecialchars($order['ContactPerson']) ?></td>
-                        <td><span class="order-link" data-order-id="<?= htmlspecialchars($order['OrderID']) ?>"><?= htmlspecialchars($order['OrderID']) ?></span></td>
-                        <td><?= htmlspecialchars($order['TotalQuantity']) ?></td>
                         <td>₱<?= number_format($order['Total'], 2) ?></td>
                         <td><?= htmlspecialchars($order['Status']) ?></td>
                         <td><?= htmlspecialchars($order['DeliveryDate']) ?></td>
@@ -460,16 +432,23 @@ try {
                                     data-date="<?= htmlspecialchars($order['OrderDate']) ?>"
                                     data-delivery="<?= htmlspecialchars($order['DeliveryDate']) ?>"
                                     data-total="<?= htmlspecialchars($order['Total']) ?>"
-                                    data-quantity="<?= htmlspecialchars($order['TotalQuantity']) ?>"
                                     data-status="<?= htmlspecialchars($order['Status']) ?>"
                                     title="Edit Order">
                                 <i class="fas fa-edit"></i>
                             </button>
+                            <button class="btn btn-sm btn-success invoice-btn ms-2" 
+                                    data-order-id="<?= htmlspecialchars($order['OrderID']) ?>"
+                                    title="View Invoice">
+                                <i class="fas fa-file-invoice"></i>
+                            </button>
+                            <span class="order-link ms-2" data-order-id="<?= htmlspecialchars($order['OrderID']) ?>">
+                                <i class="fas fa-info-circle" title="View Details"></i>
+                            </span>
                         </td>
                     </tr>
                 <?php endforeach; ?>
             <?php else: ?>
-                <tr><td colspan="8" class="text-center text-muted">No customer orders available. Input new order.</td></tr>
+                <tr><td colspan="6" class="text-center text-muted">No customer orders available. Input new order.</td></tr>
             <?php endif; ?>
         </tbody>
     </table>
@@ -500,10 +479,6 @@ try {
                         <div class="mb-3">
                             <label for="editTotal" class="form-label">Total</label>
                             <input type="number" class="form-control" id="editTotal" name="total" step="0.01" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="editQuantity" class="form-label">Quantity</label>
-                            <input type="number" class="form-control" id="editQuantity" name="quantity" required>
                         </div>
                         <div class="mb-3">
                             <label for="editStatus" class="form-label">Status</label>
@@ -624,7 +599,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 tbody.innerHTML = '';
 
                 if (orders.error) {
-                    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">${orders.error}</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">${orders.error}</td></tr>`;
                     return;
                 }
 
@@ -634,8 +609,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             <tr>
                                 <td>${order.OrderID}</td>
                                 <td>${order.ContactPerson || ''}</td>
-                                <td><span class="order-link" data-order-id="${order.OrderID}">${order.OrderID}</span></td>
-                                <td>${order.TotalQuantity || 0}</td>
                                 <td>₱${parseFloat(order.Total || 0).toFixed(2)}</td>
                                 <td>${order.Status || ''}</td>
                                 <td>${order.DeliveryDate || ''}</td>
@@ -646,27 +619,35 @@ document.addEventListener('DOMContentLoaded', function() {
                                             data-date="${order.OrderDate}"
                                             data-delivery="${order.DeliveryDate}"
                                             data-total="${order.Total}"
-                                            data-quantity="${order.TotalQuantity}"
                                             data-status="${order.Status}"
                                             title="Edit Order">
                                         <i class="fas fa-edit"></i>
                                     </button>
+                                    <button class="btn btn-sm btn-success invoice-btn ms-2" 
+                                            data-order-id="${order.OrderID}"
+                                            title="View Invoice">
+                                        <i class="fas fa-file-invoice"></i>
+                                    </button>
+                                    <span class="order-link ms-2" data-order-id="${order.OrderID}">
+                                        <i class="fas fa-info-circle" title="View Details"></i>
+                                    </span>
                                 </td>
                             </tr>
                         `;
                         tbody.innerHTML += row;
                     });
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No customer orders available. Input new order.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No customer orders available. Input new order.</td></tr>';
                 }
 
                 // Reattach event listeners after updating table
                 attachEditButtonListeners();
+                attachInvoiceButtonListeners();
                 attachOrderLinkListeners();
             },
             error: function(xhr, status, error) {
                 console.error('AJAX error:', status, error);
-                document.getElementById('orderTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error loading orders</td></tr>';
+                document.getElementById('orderTableBody').innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading orders</td></tr>';
             }
         });
     }
@@ -690,7 +671,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const orderDate = this.getAttribute('data-date');
                 const deliveryDate = this.getAttribute('data-delivery');
                 const total = this.getAttribute('data-total');
-                const quantity = this.getAttribute('data-quantity');
                 const status = this.getAttribute('data-status');
 
                 document.getElementById('editOrderId').value = orderId;
@@ -698,11 +678,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('editOrderDate').value = orderDate;
                 document.getElementById('editDeliveryDate').value = deliveryDate;
                 document.getElementById('editTotal').value = total;
-                document.getElementById('editQuantity').value = quantity;
                 document.getElementById('editStatus').value = status;
 
                 const modal = new bootstrap.Modal(document.getElementById('editOrderModal'));
                 modal.show();
+            });
+        });
+    }
+
+    // Invoice button functionality
+    function attachInvoiceButtonListeners() {
+        document.querySelectorAll('.invoice-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const orderId = this.getAttribute('data-order-id');
+                // Redirect to NewInvoice.php with order_id
+                window.location.href = `NewInvoice.php?order_id=${orderId}`;
             });
         });
     }
@@ -804,6 +794,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initial table load and event listeners
     updateTable();
     attachEditButtonListeners();
+    attachInvoiceButtonListeners();
     attachOrderLinkListeners();
 });
 </script>

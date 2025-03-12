@@ -34,6 +34,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $phone = $_POST['phone'] ?? '';
     $contact_person = $_POST['contact_person'] ?? '';
     $payment_terms = $_POST['payment_terms'] ?? '';
+    $tin = $_POST['tin'] ?? ''; // TIN from form
     $billing_country = $_POST['billing_country'] ?? '';
     $billing_address1 = $_POST['billing_address1'] ?? '';
     $billing_address2 = $_POST['billing_address2'] ?? '';
@@ -48,21 +49,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $shipping_zip = $_POST['shipping_zip'] ?? '';
     $remarks = $_POST['remarks'] ?? '';
 
-    // Validate required fields
+    // Validate required fields (TinNumber is NOT NULL in DB, so make it required)
     if (empty($first_name) || empty($last_name) || empty($company_name) || empty($email) || 
-        empty($phone) || empty($contact_person) || empty($payment_terms) || empty($billing_country) || 
-        empty($billing_address1) || empty($billing_city) || empty($billing_zip)) {
+        empty($phone) || empty($contact_person) || empty($payment_terms) || empty($tin) || 
+        empty($billing_country) || empty($billing_address1) || empty($billing_city) || empty($billing_zip)) {
         $error = "All required fields must be filled.";
     } else {
         try {
             // Prepare SQL query for the Customers table
             $sql = "INSERT INTO Customers (
                 Salutation, FirstName, LastName, CompanyName, Email, Phone, 
-                ContactPerson, PaymentTerms, BillingCountry, BillingAddress1, 
+                ContactPerson, PaymentTerms, TinNumber, BillingCountry, BillingAddress1, 
                 BillingAddress2, BillingAddress3, BillingCity, BillingZipCode,
                 ShippingCountry, ShippingAddress1, ShippingAddress2, 
                 ShippingAddress3, ShippingCity, ShippingZipCode, Remarks
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             
             $stmt = $conn->prepare($sql);
             if ($stmt === false) {
@@ -72,7 +73,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Execute with form data
             $result = $stmt->execute([
                 $salutation, $first_name, $last_name, $company_name, $email, $phone,
-                $contact_person, $payment_terms, $billing_country, $billing_address1,
+                $contact_person, $payment_terms, $tin, $billing_country, $billing_address1,
                 $billing_address2, $billing_address3, $billing_city, $billing_zip,
                 $shipping_country, $shipping_address1, $shipping_address2,
                 $shipping_address3, $shipping_city, $shipping_zip, $remarks
@@ -81,7 +82,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Debugging: Check if query executed
             if ($result) {
                 echo "Data inserted successfully!<br>";
-                header("Location: Customers.php?status=success");  // Changed to Customers.php
+                header("Location: Customers.php?status=success");
                 exit();
             } else {
                 echo "Insert failed!<br>";
@@ -109,42 +110,42 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <div class="left-sidebar">
     <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
     <ul class="menu">
-    <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
-            <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
-                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
-                    <li><a href="Deliverytable.php">Delivery</a></li>
-                </ul>
-            </li>
-            <li class="dropdown">
-                <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
-                    <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
-                </ul>
-            </li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                    <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
-                    <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
-                </ul>
-            </li>
-            <li>
-                <a href="Reports.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
-                </a>
-            </li>
-            <li>
-                <a href="logout.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-sign-out-alt"></i><span> Log out</span>
-                </a>
-            </li>
+        <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
+        <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
+                <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
+                <li><a href="Deliverytable.php">Delivery</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+            <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
+                <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
+                <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
+                <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
+            </ul>
+        </li>
+        <li>
+            <a href="Reports.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
+            </a>
+        </li>
+        <li>
+            <a href="logout.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-sign-out-alt"></i><span> Log out</span>
+            </a>
+        </li>
     </ul>
 </div>
 
@@ -209,7 +210,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <input type="text" class="form-control" name="payment_terms" placeholder="Payment Terms" style="width: 700px; height: 45px;" required>
                     </div>
                     <div class="mb-3">
-                        <input type="file" class="form-control" name="documents" style="width: 700px; height: 45px;">
+                        <input type="text" class="form-control" name="tin" placeholder="TIN" style="width: 700px; height: 45px;" required>
                     </div>
                 </div>
 

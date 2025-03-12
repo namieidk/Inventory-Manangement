@@ -4,9 +4,9 @@ include '../database/utils.php';
 session_start();
 
 $userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
-if (!isset($_SESSION['last_invoice_log']) || (time() - $_SESSION['last_invoice_log']) > 300) {
-    logAction($conn, $userId, "Accessed New Invoice Page", "User accessed the new invoice page");
-    $_SESSION['last_invoice_log'] = time();
+if (!isset($_SESSION['last_return_log']) || (time() - $_SESSION['last_return_log']) > 300) {
+    logAction($conn, $userId, "Accessed New Return Page", "User accessed the new return page");
+    $_SESSION['last_return_log'] = time();
 }
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -16,8 +16,36 @@ if (!isset($conn) || !$conn) {
     die("Database connection failed. Check database.php configuration.");
 }
 
-// Get order_id from URL if provided
-$prefill_order_id = isset($_GET['order_id']) ? (int)$_GET['order_id'] : null;
+// Get invoice_id from URL if provided, and map it to order_id
+$prefill_invoice_id = isset($_GET['invoice_id']) ? (int)$_GET['invoice_id'] : null;
+$prefill_order_id = null;
+$prefill_customer_name = '';
+$prefill_reference_number = '';
+if ($prefill_invoice_id) {
+    try {
+        // Fetch the order_id and client_name from the Invoice table
+        $stmt = $conn->prepare("
+            SELECT i.tin, i.client_name, i.reference_number
+            FROM Invoice i
+            WHERE i.invoice_id = :invoice_id
+        ");
+        $stmt->execute([':invoice_id' => $prefill_invoice_id]);
+        $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($invoice) {
+            // Assuming 'tin' contains 'Order-<order_id>' format, extract order_id
+            if (preg_match('/Order-(\d+)/', $invoice['tin'], $matches)) {
+                $prefill_order_id = (int)$matches[1];
+            }
+            $prefill_customer_name = $invoice['client_name'];
+            $prefill_reference_number = $invoice['reference_number'];
+        } else {
+            echo "<script>alert('Invoice not found.');</script>";
+        }
+    } catch (PDOException $e) {
+        echo "<script>alert('Error fetching invoice details: " . addslashes($e->getMessage()) . "');</script>";
+    }
+}
 
 // Fetch products for the dropdown
 try {
@@ -38,7 +66,7 @@ try {
     echo "<script>alert('Error fetching customer orders: " . addslashes($e->getMessage()) . "');</script>";
 }
 
-// Fetch order items if order_id is provided
+// Fetch order items if order_id is determined from invoice_id
 $prefill_items = [];
 if ($prefill_order_id) {
     try {
@@ -60,16 +88,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         $conn->beginTransaction();
 
         $order_id = $_POST['order_id'] ?? null;
-        $reference_number = $_POST['reference_number'] ?? '';
-        $estimated_delivery_date = $_POST['estimated_delivery_date'] ?? '';
-        $payment_status = $_POST['payment_status'] ?? 'Pending';
-        $payment_type = $_POST['payment_type'] ?? 'Cash';
-        $payment_terms = $_POST['payment_terms'] ?? 'COD';
-        $total = (float)($_POST['total'] ?? 0.00);
+        $return_reference = $_POST['return_reference'] ?? '';
+        $return_date = $_POST['return_date'] ?? '';
+        $return_reason = $_POST['return_reason'] ?? '';
+        $return_status = $_POST['return_status'] ?? 'Pending';
+        $total_refunded = (float)($_POST['total'] ?? 0.00);
 
         // Validation
-        if (empty($order_id) || empty($estimated_delivery_date)) {
-            throw new Exception("Customer Name and Estimated Delivery Date are required.");
+        if (empty($order_id) || empty($return_date)) {
+            throw new Exception("Customer Name and Return Date are required.");
         }
 
         // Fetch CustomerName based on OrderID
@@ -80,26 +107,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
             throw new Exception("Invalid Order ID selected.");
         }
 
-        // Insert into Invoice table (only total_amount, no sub_total or discount_percent)
-        $sql = "INSERT INTO Invoice (reference_number, payment_type, client_name, date, tin, payment_terms, total_amount, status) 
-                VALUES (:reference_number, :payment_type, :client_name, :date, :tin, :payment_terms, :total_amount, :status)";
+        // Insert into Returns table
+        $sql = "INSERT INTO Returns (order_id, return_reference, customer_name, return_date, return_reason, total_refunded, status) 
+                VALUES (:order_id, :return_reference, :customer_name, :return_date, :return_reason, :total_refunded, :status)";
         $stmt = $conn->prepare($sql);
         $stmt->execute([
-            ':reference_number' => $reference_number,
-            ':payment_type' => $payment_type,
-            ':client_name' => $customer_name,
-            ':date' => $estimated_delivery_date,
-            ':tin' => "Order-$order_id",
-            ':payment_terms' => $payment_terms,
-            ':total_amount' => $total,
-            ':status' => $payment_status
+            ':order_id' => $order_id,
+            ':return_reference' => $return_reference,
+            ':customer_name' => $customer_name,
+            ':return_date' => $return_date,
+            ':return_reason' => $return_reason,
+            ':total_refunded' => $total_refunded,
+            ':status' => $return_status
         ]);
-        $invoice_id = $conn->lastInsertId();
+        $return_id = $conn->lastInsertId();
 
-        // Insert items into InvoiceItems
+        // Insert items into ReturnItems
         if (isset($_POST['items']) && is_array($_POST['items'])) {
-            $item_sql = "INSERT INTO InvoiceItems (invoice_id, product, quantity, unit_price, amount) 
-                         VALUES (:invoice_id, :product, :quantity, :unit_price, :amount)";
+            $item_sql = "INSERT INTO ReturnItems (return_id, product, quantity, unit_price, amount) 
+                         VALUES (:return_id, :product, :quantity, :unit_price, :amount)";
             $item_stmt = $conn->prepare($item_sql);
 
             foreach ($_POST['items'] as $item) {
@@ -110,7 +136,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
 
                 if (!empty($product) && $quantity > 0 && $unit_price >= 0) {
                     $item_stmt->execute([
-                        ':invoice_id' => $invoice_id,
+                        ':return_id' => $return_id,
                         ':product' => $product,
                         ':quantity' => $quantity,
                         ':unit_price' => $unit_price,
@@ -121,17 +147,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         }
 
         $conn->commit();
-        logAction($conn, $userId, "Invoice Created", "Invoice ID: $invoice_id created successfully");
-        echo "<script>alert('Invoice created successfully!'); window.location.href = 'Invoice.php';</script>";
+        logAction($conn, $userId, "Return Created", "Return ID: $return_id created successfully");
+        echo "<script>alert('Return created successfully!'); window.location.href = 'Returns.php';</script>";
         exit;
     } catch (PDOException $e) {
         $conn->rollBack();
-        logAction($conn, $userId, "Invoice Creation Failed", "Database error: " . $e->getMessage());
-        echo "<script>alert('Database error saving invoice: " . addslashes($e->getMessage()) . "');</script>";
+        logAction($conn, $userId, "Return Creation Failed", "Database error: " . $e->getMessage());
+        echo "<script>alert('Database error saving return: " . addslashes($e->getMessage()) . "');</script>";
     } catch (Exception $e) {
         $conn->rollBack();
-        logAction($conn, $userId, "Invoice Creation Failed", "Error: " . $e->getMessage());
-        echo "<script>alert('Error saving invoice: " . addslashes($e->getMessage()) . "');</script>";
+        logAction($conn, $userId, "Return Creation Failed", "Error: " . $e->getMessage());
+        echo "<script>alert('Error saving return: " . addslashes($e->getMessage()) . "');</script>";
     }
 }
 ?>
@@ -141,7 +167,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>New Invoice</title>
+    <title>New Return</title>
     <link href="../statics/bootstrap css/bootstrap.min.css" rel="stylesheet">
     <link href="../statics/NewCustomerOrder.css" rel="stylesheet">
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
@@ -160,8 +186,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         .left-sidebar .menu li a { color: #fff; }
         .total-section p, .total-section h5 { margin: 10px 0; }
         .total-value { margin-left: 5px; display: inline-block; width: 100px; }
-        .percent-input-container { display: inline-flex; align-items: center; margin-left: 5px; }
-        .percent-input-container input { width: 70px; margin-right: 5px; }
     </style>
 </head>
 <body>
@@ -191,6 +215,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
                 <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
                 <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
                 <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                <li><a href="Returns.php" style="color: white; text-decoration: none;">Returns</a></li>
             </ul>
         </li>
         <li class="dropdown">
@@ -206,8 +231,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
     </ul>
 </div>
 <div class="container">
-    <h1>New Invoice<?php echo $prefill_order_id ? " Order #$prefill_order_id" : ""; ?></h1>
-    <form method="post" id="invoiceForm">
+    <h1>New Return<?php echo $prefill_order_id ? " Order #$prefill_order_id" : ($prefill_invoice_id ? " Invoice #$prefill_invoice_id" : ""); ?></h1>
+    <form method="post" id="returnForm">
         <div class="row mb-3">
             <div class="col-md-6">
                 <label class="form-label">Customer Name</label>
@@ -222,40 +247,27 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
                 </select>
             </div>
             <div class="col-md-6">
-                <label class="form-label">Reference Number</label>
-                <input type="text" class="form-control" name="reference_number" style="width: 400px; height: 40px;">
+                <label class="form-label">Return Reference</label>
+                <input type="text" class="form-control" name="return_reference" style="width: 400px; height: 40px;" value="<?php echo htmlspecialchars($prefill_reference_number); ?>">
             </div>
             <div class="col-md-6 mt-3">
-                <label class="form-label">Estimated Delivery Date</label>
-                <input type="date" class="form-control" name="estimated_delivery_date" style="width: 400px; height: 40px;" value="<?php echo date('Y-m-d'); ?>" required>
+                <label class="form-label">Return Date</label>
+                <input type="date" class="form-control" name="return_date" style="width: 400px; height: 40px;" value="<?php echo date('Y-m-d'); ?>" required>
             </div>
             <div class="col-md-6 mt-3">
-                <label class="form-label">Payment Status</label>
-                <select class="form-control" name="payment_status" style="width: 400px; height: 40px;" required>
+                <label class="form-label">Return Status</label>
+                <select class="form-control" name="return_status" style="width: 400px; height: 40px;" required>
                     <option value="Pending">Pending</option>
-                    <option value="Paid">Paid</option>
-                    <option value="Overdue">Overdue</option>
+                    <option value="Processed">Processed</option>
+                    <option value="Refunded">Refunded</option>
                 </select>
             </div>
             <div class="col-md-6 mt-3">
-                <label class="form-label">Payment Type</label>
-                <select class="form-control" name="payment_type" style="width: 400px; height: 40px;" required>
-                    <option value="Cash">Cash</option>
-                    <option value="Charge">Charge</option>
-                </select>
-            </div>
-            <div class="col-md-6 mt-3">
-                <label class="form-label">Payment Terms</label>
-                <select class="form-control" name="payment_terms" style="width: 400px; height: 40px;" required>
-                    <option value="COD">COD (Cash on Delivery)</option>
-                    <option value="Net 30">Net 30</option>
-                    <option value="Net 60">Net 60</option>
-                    <option value="12 Months">12 Months to Pay</option>
-                    <option value="Due on Receipt">Due on Receipt</option>
-                </select>
+                <label class="form-label">Return Reason</label>
+                <input type="text" class="form-control" name="return_reason" style="width: 400px; height: 40px;" placeholder="e.g., Defective, Wrong Item">
             </div>
         </div>
-        <h4>Item Table</h4>
+        <h4>Return Items</h4>
         <div class="table-container">
             <table class="table item-table" id="itemTable">
                 <thead>
@@ -276,13 +288,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         <div class="row">
             <div class="col-md-6" style="margin-left: 600px; margin-top: 20px;">
                 <div class="total-section" style="width: 500px; height: 200px;">
-                    <p><strong>Sub Total: </strong><span class="total-value" id="subTotal">0.00</span></p>
-                    <p><strong>Discount (%): </strong><span class="percent-input-container">
-                        <input type="number" id="discountPercent" name="discount_percent" value="0" min="0" max="100" step="0.01">
-                        <span>%</span>
-                    </span></p>
-                    <h5><strong>Total: </strong><span class="total-value" id="total">0.00</span></h5>
-                    <input type="hidden" name="sub_total" id="subTotalInput" value="0.00">
+                    <h5><strong>Total Refunded: </strong><span class="total-value" id="total">0.00</span></h5>
                     <input type="hidden" name="total" id="totalInput" value="0.00">
                 </div>
             </div>
@@ -326,10 +332,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const itemTableBody = document.getElementById('itemTableBody');
     const addItemBtn = document.getElementById('addItemBtn');
-    const subTotalSpan = document.getElementById('subTotal');
-    const discountPercentInput = document.getElementById('discountPercent');
     const totalSpan = document.getElementById('total');
-    const subTotalInput = document.getElementById('subTotalInput');
     const totalInput = document.getElementById('totalInput');
     let rowId = 0;
 
@@ -352,7 +355,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const newRow = document.createElement('tr');
             newRow.innerHTML = `
                 <td><select class="form-control product" name="items[${rowId}][product]" required>${productOptions}</select></td>
-                <td><input type="number" class="form-control quantity" name="items[${rowId}][quantity]" min="1" value="${item.Quantity}" required></td>
+                <td><input type="number" class="form-control quantity" name="items[${rowId}][quantity]" min="1" max="${item.Quantity}" value="${item.Quantity}" required></td>
                 <td><input type="number" class="form-control unit-price" name="items[${rowId}][unit_price]" min="0" step="0.01" value="${item.UnitPrice}" readonly></td>
                 <td><input type="number" class="form-control amount" name="items[${rowId}][amount]" value="${item.Amount}" readonly></td>
                 <td><button type="button" class="btn btn-danger btn-sm remove-row">Remove</button></td>
@@ -364,18 +367,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function updateTotals() {
-        let subTotal = 0;
+    function updateTotal() {
+        let total = 0;
         document.querySelectorAll('.amount').forEach(amountInput => {
-            subTotal += parseFloat(amountInput.value) || 0;
+            total += parseFloat(amountInput.value) || 0;
         });
-        subTotalSpan.textContent = subTotal.toFixed(2);
-        subTotalInput.value = subTotal.toFixed(2);
-
-        const discountPercent = parseFloat(discountPercentInput.value) || 0;
-        const discountAmount = (subTotal * discountPercent) / 100;
-        const total = subTotal - discountAmount;
-
         totalSpan.textContent = total.toFixed(2);
         totalInput.value = total.toFixed(2);
     }
@@ -393,7 +389,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const finalAmount = quantity * unitPrice;
 
             amountInput.value = finalAmount.toFixed(2);
-            updateTotals();
+            updateTotal();
         }
 
         productSelect.addEventListener('change', function() {
@@ -406,7 +402,7 @@ document.addEventListener('DOMContentLoaded', function() {
         unitPriceInput.addEventListener('input', calculateAmount);
         removeBtn.addEventListener('click', function() {
             row.remove();
-            updateTotals();
+            updateTotal();
         });
     }
 
@@ -424,13 +420,11 @@ document.addEventListener('DOMContentLoaded', function() {
         setupRowListeners(newRow);
     });
 
-    discountPercentInput.addEventListener('input', updateTotals);
-
     document.getElementById('cancelBtn').addEventListener('click', function() {
-        window.location.href = 'Invoice.php';
+        window.location.href = 'Returns.php';
     });
 
-    updateTotals();
+    updateTotal();
 });
 </script>
 </body>

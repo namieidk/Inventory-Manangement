@@ -18,14 +18,16 @@ try {
     die("Error fetching products: " . $e->getMessage());
 }
 
-// Fetch distinct contact persons (CustomerName) from CustomerOrders
+// Fetch distinct customer names (FirstName + LastName) and their TIN from Customers table
 try {
-    $customer_stmt = $conn->prepare("SELECT DISTINCT CustomerName FROM CustomerOrders ORDER BY CustomerName ASC");
+    $customer_stmt = $conn->prepare("SELECT DISTINCT CONCAT(FirstName, ' ', LastName) AS CustomerName, TinNumber FROM Customers ORDER BY CustomerName ASC");
     $customer_stmt->execute();
-    $contact_persons = $customer_stmt->fetchAll(PDO::FETCH_COLUMN);
+    $customers = $customer_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $contact_persons = array_column($customers, 'CustomerName');
 } catch (PDOException $e) {
+    $customers = [];
     $contact_persons = [];
-    echo "<script>alert('Error fetching contact persons: " . addslashes($e->getMessage()) . "');</script>";
+    echo "<script>alert('Error fetching customers: " . addslashes($e->getMessage()) . "');</script>";
 }
 
 // Set current date for default value
@@ -42,15 +44,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         $conn->beginTransaction();
 
         // Main order details
-        $customer_name = $_POST['supplier_name'] ?? '';
+        $customer_name = $_POST['supplier_name'] ?? ''; // This will be FirstName + LastName
         $order_date = $_POST['date'] ?? $current_date;
         $tin = $_POST['tin'] ?? '';
         $delivery_date = $_POST['delivery_date'] ?? '';
         $payment_terms = $_POST['payment_terms'] ?? '';
-        $sub_total = $_POST['sub_total'] ?? 0.00; // Hidden input from JS
-        $discount_percent = $_POST['discount_percent'] ?? 0.00; // Percentage from form
-        $tax_percent = $_POST['tax_percent'] ?? 0.00; // Percentage from form
-        $total = $_POST['total'] ?? 0.00; // Hidden input from JS
+        $reference_number = $_POST['reference_number'] ?? '';
+        $serial_number = $_POST['serial_number'] ?? '';
+        $sub_total = $_POST['sub_total'] ?? 0.00;
+        $discount_percent = $_POST['discount_percent'] ?? 0.00;
+        $total = $_POST['total'] ?? 0.00;
         $document_path = '';
 
         // Handle file upload
@@ -68,11 +71,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
             throw new Exception("All required fields must be filled.");
         }
 
-        // Insert into CustomerOrders (store percentages, not calculated amounts)
-        $sql = "INSERT INTO CustomerOrders (CustomerName, OrderDate, TIN, DeliveryDate, PaymentTerms, SubTotal, Discount, Tax, Total, DocumentPath, Status) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')";
+        // Insert into CustomerOrders with new fields
+        $sql = "INSERT INTO CustomerOrders (CustomerName, OrderDate, TIN, DeliveryDate, PaymentTerms, ReferenceNumber, SerialNumber, SubTotal, Discount, Total, DocumentPath, Status) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')";
         $stmt = $conn->prepare($sql);
-        $stmt->execute([$customer_name, $order_date, $tin, $delivery_date, $payment_terms, $sub_total, $discount_percent, $tax_percent, $total, $document_path]);
+        $stmt->execute([$customer_name, $order_date, $tin, $delivery_date, $payment_terms, $reference_number, $serial_number, $sub_total, $discount_percent, $total, $document_path]);
         $order_id = $conn->lastInsertId();
 
         // Insert order items and subtract stock
@@ -201,42 +204,42 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
 <div class="left-sidebar">
     <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
     <ul class="menu">
-    <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
-            <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
-                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
-                    <li><a href="Deliverytable.php">Delivery</a></li>
-                </ul>
-            </li>
-            <li class="dropdown">
-                <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
-                    <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
-                </ul>
-            </li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                    <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
-                    <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
-                </ul>
-            </li>
-            <li>
-                <a href="Reports.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
-                </a>
-            </li>
-            <li>
-                <a href="logout.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-sign-out-alt"></i><span> Log out</span>
-                </a>
-            </li>
+        <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
+        <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
+                <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
+                <li><a href="Deliverytable.php">Delivery</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+            <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
+                <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
+                <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
+                <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
+            </ul>
+        </li>
+        <li>
+            <a href="Reports.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
+            </a>
+        </li>
+        <li>
+            <a href="logout.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-sign-out-alt"></i><span> Log out</span>
+            </a>
+        </li>
     </ul>
 </div>
 <div class="container">
@@ -244,11 +247,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
     <form method="post" id="supplierOrderForm" enctype="multipart/form-data">
         <div class="row mb-3">
             <div class="col-md-6">
-                <label class="form-label">Contact Person</label>
-                <select class="form-control" name="supplier_name" style="width: 400px; height: 40px;" required>
-                    <option value="">Select Contact Person</option>
-                    <?php foreach ($contact_persons as $contact): ?>
-                        <option value="<?php echo htmlspecialchars($contact); ?>"><?php echo htmlspecialchars($contact); ?></option>
+                <label class="form-label">Customer Name</label>
+                <select class="form-control" name="supplier_name" id="customerSelect" style="width: 400px; height: 40px;" required>
+                    <option value="">Select Customer</option>
+                    <?php foreach ($customers as $customer): ?>
+                        <option value="<?php echo htmlspecialchars($customer['CustomerName']); ?>" data-tin="<?php echo htmlspecialchars($customer['TinNumber']); ?>">
+                            <?php echo htmlspecialchars($customer['CustomerName']); ?>
+                        </option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -258,10 +263,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
             </div>
             <div class="col-md-6 mt-3">
                 <label class="form-label">TIN</label>
-                <input type="text" class="form-control" name="tin" style="width: 400px; height: 40px;">
+                <input type="text" class="form-control" name="tin" id="tinInput" style="width: 400px; height: 40px;" readonly>
             </div>
             <div class="col-md-6 mt-3">
-                <label class="form-label">Delivery Date</label>
+                <label class="form-label">Estimated Date</label>
                 <input type="date" class="form-control" name="delivery_date" style="width: 400px; height: 40px;" min="<?php echo $current_date; ?>" required>
             </div>
             <div class="col-md-6 mt-3">
@@ -273,6 +278,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
                     <option value="Net 60">Net 60</option>
                     <option value="Prepaid">Prepaid</option>
                 </select>
+            </div>
+            <div class="col-md-6 mt-3">
+                <label class="form-label">Reference Number</label>
+                <input type="text" class="form-control" name="reference_number" style="width: 400px; height: 40px;">
+            </div>
+            <div class="col-md-6 mt-3">
+                <label class="form-label">Serial Number</label>
+                <input type="text" class="form-control" name="serial_number" style="width: 400px; height: 40px;">
             </div>
         </div>
         <h4>Item Table</h4>
@@ -294,19 +307,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         </div>
         <button type="button" class="btn btn-success mt-3" id="addOrderBtn">Add Order</button>
         <div class="row">
-            <div class="col-md-6">
-                <label class="form-label" style="margin-top: 50px;">Documents</label>
-                <input type="file" class="form-control" name="documents" style="width: 400px;">
-            </div>
             <div class="col-md-6" style="margin-left: 600px; margin-top: -60px;">
-                <div class="total-section" style="width: 500px; height: 200px;">
+                <div class="total-section" style="width: 500px; height: 150px;">
                     <p><strong>Sub Total: </strong><span class="total-value" id="subTotal">0.00</span></p>
                     <p><strong>Discount (%): </strong><span class="percent-input-container">
                         <input type="number" id="discountPercent" name="discount_percent" value="0" min="0" max="100" step="0.01">
-                        <span>%</span>
-                    </span></p>
-                    <p><strong>Tax (%): </strong><span class="percent-input-container">
-                        <input type="number" id="taxPercent" name="tax_percent" value="0" min="0" max="100" step="0.01">
                         <span>%</span>
                     </span></p>
                     <h5><strong>Total: </strong><span class="total-value" id="total">0.00</span></h5>
@@ -335,10 +340,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const addOrderBtn = document.getElementById('addOrderBtn');
     const subTotalSpan = document.getElementById('subTotal');
     const discountPercentInput = document.getElementById('discountPercent');
-    const taxPercentInput = document.getElementById('taxPercent');
     const totalSpan = document.getElementById('total');
     const subTotalInput = document.getElementById('subTotalInput');
     const totalInput = document.getElementById('totalInput');
+    const customerSelect = document.getElementById('customerSelect');
+    const tinInput = document.getElementById('tinInput');
     let rowCount = 0;
 
     const products = <?php echo json_encode($products); ?>;
@@ -354,6 +360,13 @@ document.addEventListener('DOMContentLoaded', function() {
         productStocks[product.id] = parseInt(product.stock);
     });
 
+    // Update TIN when customer is selected
+    customerSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        const tin = selectedOption.getAttribute('data-tin') || '';
+        tinInput.value = tin;
+    });
+
     function updateTotals() {
         let subTotal = 0;
         document.querySelectorAll('.amount').forEach(amountInput => {
@@ -364,12 +377,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const discountPercent = parseFloat(discountPercentInput.value) || 0;
         const discountAmount = (subTotal * discountPercent) / 100;
-        const afterDiscount = subTotal - discountAmount;
+        const total = subTotal - discountAmount;
 
-        const taxPercent = parseFloat(taxPercentInput.value) || 0;
-        const taxAmount = (afterDiscount * taxPercent) / 100;
-
-        const total = afterDiscount + taxAmount;
         totalSpan.textContent = total.toFixed(2);
         totalInput.value = total.toFixed(2);
     }
@@ -431,7 +440,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     discountPercentInput.addEventListener('input', updateTotals);
-    taxPercentInput.addEventListener('input', updateTotals);
 
     document.getElementById('cancelBtn').addEventListener('click', function() {
         if (confirm('Are you sure you want to cancel? All unsaved changes will be lost.')) {
@@ -439,10 +447,10 @@ document.addEventListener('DOMContentLoaded', function() {
             itemTableBody.innerHTML = '';
             subTotalSpan.textContent = '0.00';
             discountPercentInput.value = '0';
-            taxPercentInput.value = '0';
             totalSpan.textContent = '0.00';
             subTotalInput.value = '0.00';
             totalInput.value = '0.00';
+            tinInput.value = ''; // Reset TIN field
         }
     });
 });

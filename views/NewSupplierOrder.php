@@ -69,7 +69,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
             throw new Exception("All required fields must be filled.");
         }
 
-        // Removed 'Tax' from the INSERT statement
         $sql = "INSERT INTO SupplierOrders (SupplierName, OrderDate, TIN, DeliveryDate, PaymentTerms, SubTotal, Discount, Total, DocumentPath) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($sql);
@@ -188,41 +187,41 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
             </div>
         </div>
         <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
-            <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
-                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
-                    <li><a href="Deliverytable.php">Delivery</a></li>
-                </ul>
-            </li>
-            <li class="dropdown">
+        <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
+                <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
+                <li><a href="Deliverytable.php">Delivery</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
                 <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
                 <ul class="submenu">
                     <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
                     <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
                 </ul>
             </li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                    <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
-                    <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
-                </ul>
-            </li>
-            <li>
-                <a href="Reports.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
-                </a>
-            </li>
-            <li>
-                <a href="logout.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-sign-out-alt"></i><span> Log out</span>
-                </a>
-            </li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
+                <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
+                <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
+            </ul>
+        </li>
+        <li>
+            <a href="Reports.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
+            </a>
+        </li>
+        <li>
+            <a href="logout.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-sign-out-alt"></i><span> Log out</span>
+            </a>
+        </li>
     </ul>
 </div>
 <div class="container">
@@ -253,7 +252,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
                 </select>
             </div>
             <div class="col-md-6 mt-3">
-                <label class="form-label">Delivery Date</label>
+                <label class="form-label">Estimated Date</label>
                 <input type="date" class="form-control" name="delivery_date" style="width: 400px; height: 40px;" min="<?php echo $current_date; ?>" required>
             </div>
         </div>
@@ -335,7 +334,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const addOrderBtn = document.getElementById('addOrderBtn');
     const subTotalSpan = document.getElementById('subTotal');
     const discountPercentInput = document.getElementById('discountPercent');
-    const taxPercentInput = document.getElementById('taxPercent');
     const totalSpan = document.getElementById('total');
     const subTotalInput = document.getElementById('subTotalInput');
     const totalInput = document.getElementById('totalInput');
@@ -362,12 +360,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const discountPercent = parseFloat(discountPercentInput.value) || 0;
         const discountAmount = (subTotal * discountPercent) / 100;
-        const afterDiscount = subTotal - discountAmount;
+        const total = subTotal - discountAmount;
 
-        const taxPercent = parseFloat(taxPercentInput.value) || 0;
-        const taxAmount = (afterDiscount * taxPercent) / 100;
-
-        const total = afterDiscount + taxAmount;
         totalSpan.textContent = total.toFixed(2);
         totalInput.value = total.toFixed(2);
     }
@@ -417,7 +411,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     discountPercentInput.addEventListener('input', updateTotals);
-    taxPercentInput.addEventListener('input', updateTotals);
 
     document.getElementById('cancelBtn').addEventListener('click', function() {
         if (confirm('Are you sure you want to cancel? All unsaved changes will be lost.')) {
@@ -425,12 +418,14 @@ document.addEventListener('DOMContentLoaded', function() {
             itemTableBody.innerHTML = '';
             subTotalSpan.textContent = '0.00';
             discountPercentInput.value = '0';
-            taxPercentInput.value = '0';
             totalSpan.textContent = '0.00';
             subTotalInput.value = '0.00';
             totalInput.value = '0.00';
         }
     });
+
+    // Initial call to set totals to 0
+    updateTotals();
 });
 </script>
 </body>

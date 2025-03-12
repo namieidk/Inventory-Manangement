@@ -56,10 +56,8 @@ function fetchOrders($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
             so.Total,
             so.SubTotal,
             so.Discount,
-            SUM(soi.Quantity) AS TotalQuantity,
             so.Status
         FROM SupplierOrders so
-        LEFT JOIN SupplierOrderItems soi ON so.OrderID = soi.OrderID
         WHERE 1=1";
         $whereClause = '';
         $orderClause = " ORDER BY so.OrderDate DESC"; // Default
@@ -115,9 +113,7 @@ function fetchOrders($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
                 break;
         }
 
-        $sql .= $whereClause . "
-            GROUP BY so.OrderID, so.SupplierName, so.OrderDate, so.DeliveryDate, so.Total, so.SubTotal, so.Discount, so.Status
-        " . $orderClause;
+        $sql .= $whereClause . " " . $orderClause;
 
         $stmt = $conn->prepare($sql);
         foreach ($params as $key => $value) {
@@ -246,13 +242,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             </ul>
         </li>
         <li class="dropdown">
-            <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
-            <ul class="submenu">
-                <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
-                <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
-            </ul>
-        </li>
+                <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
+                <ul class="submenu">
+                    <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
+                    <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                </ul>
+            </li>
         <li class="dropdown">
             <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
             <ul class="submenu">
@@ -308,10 +304,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     <table class="table table-striped table-hover" id="ordersTable">
         <thead>
             <tr>
-                <th>Supplier ID</th>
+                <th>Supplier Order ID</th>
                 <th>Supplier Name</th>
-                <th>Order#</th>
-                <th>Quantity</th>
                 <th>Total</th>
                 <th>Status</th>
                 <th>Estimated Date</th>
@@ -412,15 +406,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 tbody.innerHTML = '';
 
                 if (orders.error) {
-                    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">${orders.error}</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">${orders.error}</td></tr>`;
                 } else if (orders.length > 0) {
                     orders.forEach(order => {
                         const row = `
                             <tr>
                                 <td>${order.OrderID || 'N/A'}</td>
                                 <td>${order.ContactPerson || ''}</td>
-                                <td><span class="order-link" data-order-id="${order.OrderID}">${order.OrderID}</span></td>
-                                <td>${order.TotalQuantity || 0}</td>
                                 <td>₱${parseFloat(order.Total || 0).toFixed(2)}</td>
                                 <td>${order.Status || ''}</td>
                                 <td>${order.DeliveryDate || ''}</td>
@@ -430,13 +422,16 @@ document.addEventListener('DOMContentLoaded', function() {
                                             title="View Delivery">
                                         <i class="fas fa-truck"></i>
                                     </button>
+                                    <span class="order-link ms-2" data-order-id="${order.OrderID}">
+                                        <i class="fas fa-info-circle" title="View Details"></i>
+                                    </span>
                                 </td>
                             </tr>
                         `;
                         tbody.innerHTML += row;
                     });
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No supplier orders available. Input new order.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No supplier orders available. Input new order.</td></tr>';
                 }
 
                 // Update the select elements to reflect current values
@@ -449,7 +444,7 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             error: function(xhr, status, error) {
                 console.error('AJAX error:', status, error, xhr.responseText);
-                document.getElementById('orderTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error loading orders: ' + xhr.responseText + '</td></tr>';
+                document.getElementById('orderTableBody').innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading orders: ' + xhr.responseText + '</td></tr>';
             }
         });
     }

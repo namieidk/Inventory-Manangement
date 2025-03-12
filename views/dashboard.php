@@ -1,26 +1,10 @@
 <?php
 include '../database/database.php';
-include '../database/utils.php';
 session_start();
-
-$userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
-// Only log if last log was more than X seconds ago
-if (!isset($_SESSION['last_dashboard_log']) || (time() - $_SESSION['last_dashboard_log']) > 300) { // 300 seconds = 5 minutes
-    logAction($conn, $userId, "Accessed dashboard Page", "User accessed the dashboard page");
-    $_SESSION['last_dashboard_log'] = time();
-}
 
 if (!isset($_SESSION['username'])) {
     header('Location: Login.php');
     date_default_timezone_set('Asia/Manila'); 
-    exit;
-}
-
-// Handle theme setting via AJAX
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'set_theme') {
-    $theme = $_POST['theme'] ?? 'light';
-    $_SESSION['theme'] = $theme;
-    echo json_encode(['status' => 'success', 'theme' => $theme]);
     exit;
 }
 
@@ -148,7 +132,7 @@ for ($i = 0; $i < 7; $i++) {
         $daily_stmt->execute([':date' => $date]);
         $daily_sales[$date] = $daily_stmt->fetch(PDO::FETCH_ASSOC)['daily_total'] ?? 0.00;
     } catch (PDOException $e) {
-        $daily_sales[$date] = 0.00;
+        $daily_sales[$date] = 0.00; // Default to 0 on error
     }
 }
 
@@ -172,7 +156,7 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
         $week_label = "Week of " . date('M d', $week_start);
         $weekly_sales[$week_label] = $weekly_stmt->fetch(PDO::FETCH_ASSOC)['weekly_total'] ?? 0.00;
     } catch (PDOException $e) {
-        $weekly_sales[$week_label] = 0.00;
+        $weekly_sales[$week_label] = 0.00; // Default to 0 on error
     }
 }
 ?>
@@ -190,204 +174,57 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
     <style>
         .graph-container {
             width: 100%;
-            height: 400px;
-            margin: 20px 0 50px 0;
+            height: 400px; /* Increased height to ensure labels fit */
+            margin: 20px 0 50px 0; /* Added bottom margin to push content down */
         }
         #toggleGraphBtn {
             margin: 10px 0;
         }
         .recent-orders, .inventory-summary {
-            margin-top: 40px;
-        }
-
-        /* Base styles */
-        body {
-            background-color: #f4f4f4;
-            color: #333;
-            transition: background-color 0.3s, color 0.3s;
-        }
-
-        /* Light Mode */
-        body.light-mode {
-            background-color: #f4f4f4;
-            color: #333;
-        }
-        .light-mode .left-sidebar {
-            background-color: #343F79;
-        }
-        .light-mode .left-sidebar .menu li a,
-        .light-mode .left-sidebar .menu li span,
-        .light-mode .left-sidebar .submenu li a {
-            color: white;
-            text-decoration: none;
-        }
-        .light-mode .left-sidebar .menu li:hover,
-        .light-mode .left-sidebar .menu li.dropdown.active {
-            background-color: #4a568a;
-        }
-        .light-mode .card {
-            background-color: #fff;
-            color: #333;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        }
-        .light-mode .main-content {
-            background-color: #f4f4f4;
-        }
-
-        /* Dark Mode */
-        body.dark-mode {
-            background-color: #1a1a1a;
-            color: #e0e0e0;
-        }
-        .dark-mode .left-sidebar {
-            background-color: #2c2c2c;
-        }
-        .dark-mode .left-sidebar .menu li a,
-        .dark-mode .left-sidebar .menu li span,
-        .dark-mode .left-sidebar .submenu li a {
-            color: #e0e0e0;
-            text-decoration: none;
-        }
-        .dark-mode .left-sidebar .menu li:hover,
-        .dark-mode .left-sidebar .menu li.dropdown.active {
-            background-color: #3a3a3a;
-        }
-        .dark-mode .main-content {
-            background-color: #252525;
-        }
-        .dark-mode .card {
-            background-color: #3a3a3a;
-            color: #e0e0e0;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-        }
-        .dark-mode .right-sidebar {
-            background-color: #2c2c2c;
-            color: #e0e0e0;
-        }
-        .dark-mode .right-card {
-            color: #e0e0e0;
-        }
-        .dark-mode table {
-            color: #e0e0e0;
-            background-color: #333;
-        }
-        .dark-mode table thead th {
-            background-color: #444;
-            color: #e0e0e0;
-        }
-        .dark-mode table tbody tr {
-            background-color: #2c2c2c;
-        }
-        .dark-mode table tbody tr:hover {
-            background-color: #3a3a3a;
-        }
-        .dark-mode h1, .dark-mode h3, .dark-mode p {
-            color: #e0e0e0;
-        }
-        .dark-mode input[type="text"] {
-            background-color: #444;
-            color: #e0e0e0;
-            border: 1px solid #555;
-        }
-        .dark-mode .btn-primary {
-            background-color: #1e90ff;
-            border-color: #1e90ff;
-        }
-
-        /* Sidebar-specific styles */
-        .left-sidebar {
-            transition: background-color 0.3s;
-        }
-        .left-sidebar .menu {
-            list-style: none;
-            padding: 0;
-        }
-        .left-sidebar .menu li {
-            padding: 10px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        .left-sidebar .submenu {
-            display: none;
-            list-style: none;
-            padding-left: 20px;
-        }
-        .left-sidebar .menu li.dropdown.active .submenu {
-            display: block;
-        }
-
-        /* Settings menu */
-        #logoutMenu {
-            z-index: 1000;
-            background-color: #ffffff;
-            border: 1px solid #999;
-            border-radius: 5px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-            min-width: 120px;
-            position: absolute;
-        }
-        .dark-mode #logoutMenu {
-            background-color: #333;
-            border: 1px solid #555;
-        }
-        #logoutMenu a {
-            color: #333;
-            padding: 10px 20px;
-            text-decoration: none;
-            display: block;
-        }
-        .dark-mode #logoutMenu a {
-            color: #e0e0e0;
-        }
-        #logoutMenu a:hover {
-            background-color: #f0f0f0;
-            color: #000;
-        }
-        .dark-mode #logoutMenu a:hover {
-            background-color: #444;
-            color: #fff;
+            margin-top: 40px; /* Increased margin to move sections further down */
         }
     </style>
 </head>
-<body class="<?php echo isset($_SESSION['theme']) ? $_SESSION['theme'] . '-mode' : 'light-mode'; ?>">
+<body>
     <div class="left-sidebar">
         <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
         <ul class="menu">
-            <li><i class="fa fa-home"></i><span><a href="dashboard.php"> Home</a></span></li>
-            <li><i class="fa fa-box"></i><span><a href="Inventory.php"> Inventory</a></span></li>
+            <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
+            <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
             <li class="dropdown">
                 <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
                 <ul class="submenu">
-                    <li><a href="supplier.php">Supplier</a></li>
-                    <li><a href="SupplierOrder.php">Supplier Order</a></li>
-                    <li><a href="Deliverytable.php">Delivery</a></li>
+                    <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
+                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
                 </ul>
             </li>
             <li class="dropdown">
                 <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
                 <ul class="submenu">
-                    <li><a href="Customers.php">Customers</a></li>
-                    <li><a href="Invoice.php">Invoice</a></li>
-                    <li><a href="CustomerOrder.php">Customer Order</a></li>
+                    <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
+                    <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+
                 </ul>
             </li>
             <li class="dropdown">
                 <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
                 <ul class="submenu">
-                    <li><a href="UserManagement.php">User Management</a></li>
-                    <li><a href="AuditLogs.php">Audit Logs</a></li>
+                    <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
+                    <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
+                    <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
                 </ul>
             </li>
             <li>
-                <a href="Reports.php">
+                <a href="Reports.php" style="text-decoration: none; color: inherit;">
                     <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
                 </a>
             </li>
             <li>
-    <a href="../views/Login.php" >
-        <i class="fas fa-sign-out-alt"></i><span> Log out</span>
-    </a>
-</li>
+                <a href="logout.php" style="text-decoration: none; color: inherit;">
+                    <i class="fas fa-sign-out-alt"></i><span> Log out</span>
+                </a>
+            </li>
         </ul>
     </div>
 
@@ -399,12 +236,11 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
                     <p><?php echo date('d F Y'); ?></p>
                 </div>
                 <div class="right-sidebar-toggle" style="display: flex; align-items: center;">
-                    <!-- Removed notification icon: <i class="fa fa-bell" style="margin-right: 20px; font-size: 30px; position: relative; top: -20px;"></i> -->
+                    <i class="fa fa-bell" style="margin-right: 20px; font-size: 30px; position: relative; top: -20px;"></i>
                     <div style="position: relative; display: inline-block;">
                         <i class="fa fa-cog" id="settingsIcon" style="margin-right: 20px; font-size: 30px; position: relative; top: -20px; cursor: pointer;"></i>
-                        <div id="logoutMenu" style="display: none; position: absolute; top: 20px; right: 0;">
-                            <a href="#" id="lightModeBtn">Light Mode</a>
-                            <a href="#" id="darkModeBtn">Dark Mode</a>
+                        <div id="logoutMenu" style="display: none; position: absolute; top: 20px; right: 0; background: white; border: 1px solid #ccc; border-radius: 5px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);">
+                            <a href="logout.php" style="display: block; padding: 8px 20px; text-decoration: none; color: black; white-space: nowrap; position: relative; top: -3px;">Log out</a>
                         </div>
                     </div>
                     <div>
@@ -482,10 +318,10 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
             </div>
         </div>
         <div style="display: flex; align-items: center; margin-bottom: 20px; flex-direction: column;">
-            <input type="text" placeholder="Search" style="padding: 10px 20px; background-color: white; color: black; border: none; border-radius: 5px; width: 230px; height: 35px;">
+            <input type="text" placeholder="Search" style="display: flex; align-items: center; padding: 10px 20px; background-color: white; color: black; border: none; border-radius: 5px; width: 230px; height: 35px;">
             <div style="margin-top: 20px;">
-                <div class="right-card" style="font-size: 20px;">To be Shipped <br> <strong style="font-size: 30px;"><?php echo htmlspecialchars($to_be_shipped); ?></strong></div>
-                <div class="right-card" style="font-size: 20px;">To be Delivered <br> <strong style="font-size: 30px;"><?php echo htmlspecialchars($to_be_delivered); ?></strong></div>
+                <div class="right-card" style="color: black; font-size: 20px;">To be Shipped <br> <strong style="font-size: 30px;"><?php echo htmlspecialchars($to_be_shipped); ?></strong></div>
+                <div class="right-card" style="color: black; font-size: 20px;">To be Delivered <br> <strong style="font-size: 30px;"><?php echo htmlspecialchars($to_be_delivered); ?></strong></div>
             </div>
         </div>
     </div>
@@ -500,18 +336,14 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
             rightSidebar.style.overflowY = 'auto';
         }
 
-        // Sidebar dropdown toggle
         document.querySelectorAll('.dropdown').forEach(item => {
             item.addEventListener('click', function (e) {
-                e.stopPropagation(); // Prevent event bubbling
                 this.classList.toggle('active');
             });
         });
 
         const settingsIcon = document.getElementById('settingsIcon');
         const logoutMenu = document.getElementById('logoutMenu');
-        const lightModeBtn = document.getElementById('lightModeBtn');
-        const darkModeBtn = document.getElementById('darkModeBtn');
 
         settingsIcon.addEventListener('click', () => {
             logoutMenu.style.display = logoutMenu.style.display === 'none' ? 'block' : 'none';
@@ -521,44 +353,6 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
             if (!settingsIcon.contains(event.target) && !logoutMenu.contains(event.target)) {
                 logoutMenu.style.display = 'none';
             }
-        });
-
-        // Theme toggle logic with session persistence
-        function setTheme(theme) {
-            fetch('dashboard.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `action=set_theme&theme=${theme}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log('Theme set response:', data); // Debug log
-                if (data.status === 'success') {
-                    document.body.classList.remove('light-mode', 'dark-mode');
-                    document.body.classList.add(`${data.theme}-mode`);
-                }
-            })
-            .catch(error => console.error('Error setting theme:', error));
-        }
-
-        lightModeBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            setTheme('light');
-            logoutMenu.style.display = 'none';
-        });
-
-        darkModeBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            setTheme('dark');
-            logoutMenu.style.display = 'none';
-        });
-
-        // Apply saved theme on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedTheme = '<?php echo isset($_SESSION['theme']) ? $_SESSION['theme'] : 'light'; ?>';
-            console.log('Applying saved theme:', savedTheme); // Debug log
-            document.body.classList.remove('light-mode', 'dark-mode');
-            document.body.classList.add(`${savedTheme}-mode`);
         });
 
         // Chart.js setup

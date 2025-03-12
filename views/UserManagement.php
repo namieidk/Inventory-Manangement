@@ -130,19 +130,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode($users);
         exit;
     }
-
-    if (isset($_POST['action']) && $_POST['action'] === 'update_status') {
-        $userId = $_POST['userId'] ?? '';
-        $status = $_POST['status'] ?? '';
-        try {
-            $stmt = $conn->prepare("UPDATE users SET status = :status WHERE usersId = :userId");
-            $stmt->execute([':status' => $status, ':userId' => $userId]);
-            echo json_encode(['status' => 'success']);
-        } catch (PDOException $e) {
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
-        }
-        exit;
-    }
 }
 
 // Initial page load
@@ -171,9 +158,6 @@ if (isset($users['error'])) {
             padding: 5px;
             min-width: 150px;
             margin-left: 10px;
-        }
-        .status-select {
-            width: 100px;
         }
     </style>
 </head>
@@ -266,12 +250,13 @@ if (isset($users['error'])) {
                 <th>Username</th>
                 <th>Created at</th>
                 <th>Status</th>
+                <th>Action</th>
             </tr>
         </thead>
         <tbody id="userTableBody">
             <?php
             if (isset($error)) {
-                echo "<tr><td colspan='7' class='text-center text-danger'>" . htmlspecialchars($error) . "</td></tr>";
+                echo "<tr><td colspan='8' class='text-center text-danger'>" . htmlspecialchars($error) . "</td></tr>";
             } elseif (!empty($users)) {
                 foreach ($users as $user) {
                     echo "<tr>";
@@ -281,16 +266,16 @@ if (isset($users['error'])) {
                     echo "<td>" . htmlspecialchars($user['job_title']) . "</td>";
                     echo "<td>" . htmlspecialchars($user['username']) . "</td>";
                     echo "<td>" . htmlspecialchars($user['created_at']) . "</td>";
+                    echo "<td>" . htmlspecialchars($user['status']) . "</td>";
                     echo "<td>";
-                    echo "<select class='status-select' data-user-id='" . htmlspecialchars($user['usersId']) . "' onchange='updateStatus(this)'>";
-                    echo "<option value='active'" . ($user['status'] === 'active' ? ' selected' : '') . ">Active</option>";
-                    echo "<option value='inactive'" . ($user['status'] === 'inactive' ? ' selected' : '') . ">Inactive</option>";
-                    echo "</select>";
+                    echo "<button class='btn btn-warning btn-sm edit-btn' data-user-id='" . htmlspecialchars($user['usersId']) . "'>";
+                    echo "<i class='fas fa-edit'></i>";
+                    echo "</button>";
                     echo "</td>";
                     echo "</tr>";
                 }
             } else {
-                echo "<tr><td colspan='7' class='text-center text-muted'>No users available.</td></tr>";
+                echo "<tr><td colspan='8' class='text-center text-muted'>No users available.</td></tr>";
             }
             ?>
         </tbody>
@@ -333,7 +318,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 tbody.innerHTML = '';
 
                 if (users.error) {
-                    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">${users.error}</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">${users.error}</td></tr>`;
                     return;
                 }
 
@@ -347,19 +332,22 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td>${user.job_title || ''}</td>
                                 <td>${user.username || ''}</td>
                                 <td>${user.created_at || ''}</td>
+                                <td>${user.status || ''}</td>
                                 <td>
-                                    <select class="status-select" data-user-id="${user.usersId}" onchange="updateStatus(this)">
-                                        <option value="active" ${user.status === 'active' ? 'selected' : ''}>Active</option>
-                                        <option value="inactive" ${user.status === 'inactive' ? 'selected' : ''}>Inactive</option>
-                                    </select>
+                                    <button class="btn btn-warning btn-sm edit-btn" data-user-id="${user.usersId}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
                                 </td>
                             </tr>
                         `;
                         tbody.innerHTML += row;
                     });
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No users available.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No users available.</td></tr>';
                 }
+
+                // Attach edit button listeners after table update
+                attachEditButtonListeners();
 
                 // Update select elements to reflect current values
                 document.querySelector('select[name="orderBy"]').value = orderBy;
@@ -367,7 +355,7 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             error: function(xhr, status, error) {
                 console.error('AJAX error:', status, error);
-                document.getElementById('userTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error loading users</td></tr>';
+                document.getElementById('userTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error loading users</td></tr>';
             }
         });
     }
@@ -382,41 +370,16 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelector('select[name="orderBy"]').addEventListener('change', updateTable);
     document.querySelector('select[name="filterBy"]').addEventListener('change', updateTable);
 
-    // Update user status
-    window.updateStatus = function(select) {
-        const userId = select.getAttribute('data-user-id');
-        const newStatus = select.value;
-
-        console.log('Updating status:', { userId, newStatus });
-
-        $.ajax({
-            url: window.location.pathname,
-            method: 'POST',
-            dataType: 'json',
-            data: {
-                action: 'update_status',
-                userId: userId,
-                status: newStatus
-            },
-            success: function(response) {
-                console.log('Status update response:', response);
-                if (response.status === 'success') {
-                    updateTable(); // Refresh table
-                } else {
-                    alert('Failed to update status: ' + (response.message || 'Unknown error'));
-                    select.value = select.dataset.previousValue; // Revert on error
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Status update error:', status, error);
-                alert('Error updating status');
-                select.value = select.dataset.previousValue; // Revert on error
-            },
-            beforeSend: function() {
-                select.dataset.previousValue = select.value; // Store previous value
-            }
+    // Edit button functionality
+    function attachEditButtonListeners() {
+        document.querySelectorAll('.edit-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const userId = this.getAttribute('data-user-id');
+                alert('Edit functionality for User ID ' + userId + ' is not yet implemented.');
+                // Add logic here to open an edit modal or redirect to an edit page
+            });
         });
-    };
+    }
 
     // Initial table load
     updateTable();

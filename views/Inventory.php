@@ -9,27 +9,32 @@ if (!isset($_SESSION['last_inventory_log']) || (time() - $_SESSION['last_invento
     logAction($conn, $userId, "Accessed Inventory Page", "User accessed the inventory page");
     $_SESSION['last_inventory_log'] = time();
 }
-$invoices = [];
 // Enable error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// Handle AJAX requests
+$invoices = [];
+
+// Handle AJAX requests for product details
 if (isset($_GET['product_id'])) {
     $product_id = $_GET['product_id'];
-    $stmt = $conn->prepare("SELECT p.*, u.username AS created_by FROM products p LEFT JOIN users u ON p.userId = u.usersId WHERE p.id = ?");
+    $stmt = $conn->prepare("SELECT p.*, s.CompanyName AS supplier_company_name 
+                            FROM products p 
+                            LEFT JOIN supplier s ON p.supplier_name = s.CompanyName 
+                            WHERE p.id = ?");
     $stmt->execute([$product_id]);
     $product = $stmt->fetch(PDO::FETCH_ASSOC);
     echo $product ? json_encode($product) : json_encode(['error' => 'Product not found']);
     exit;
 }
 
+// Handle form submission for editing products
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST['product_id']) && !isset($_POST['update_status'])) {
         $product_id = $_POST['product_id'];
         $product_name = $_POST['product_name'];
         $product_type = $_POST['product_type'];
-        $supplier_name = $_POST['supplier_name'];
+        $supplier_name = $_POST['supplier_name']; // This will still be CompanyName
         $price = floatval($_POST['price']);
         $stock = intval($_POST['stock']);
         $status = $_POST['status'];
@@ -44,17 +49,38 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $stmt->execute([$status, $product_id]);
         echo 'success';
         exit;
-    } elseif (isset($_POST['productName']) && !empty($_POST['price']) && !empty($_POST['stock'])) {
-        $productName = $_POST['productName'];
-        $productType = $_POST['productType'];
-        $supplierName = $_POST['supplierName'];
-        $price = floatval($_POST['price']);
-        $stock = intval($_POST['stock']);
-        $status = $_POST['status'];
-        $userId = isset($_SESSION['usersId']) ? $_SESSION['usersId'] : 1;
-        if ($price >= 0 && $stock >= 0) {
-            $stmt = $conn->prepare("INSERT INTO products (product_name, product_type, supplier_name, price, stock, status, usersId) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$productName, $productType, $supplierName, $price, $stock, $status, $userId]);
+    } elseif (isset($_POST['new_product_type'])) { // Handle new product type submission
+        $new_product_type = trim($_POST['new_product_type']); // Trim whitespace
+        
+        // Validate input
+        if (empty($new_product_type)) {
+            echo json_encode(['error' => 'Product type cannot be empty']);
+            exit;
+        }
+
+        try {
+            // Check if the product type already exists
+            $stmt = $conn->prepare("SELECT COUNT(*) FROM ProductType WHERE product_type = ?");
+            $stmt->execute([$new_product_type]);
+            $count = $stmt->fetchColumn();
+
+            if ($count > 0) {
+                echo json_encode(['error' => 'Product type already exists']);
+                exit;
+            }
+
+            // Insert the new product type into the ProductType table
+            $stmt = $conn->prepare("INSERT INTO ProductType (product_type) VALUES (?)");
+            $stmt->execute([$new_product_type]);
+
+            // Log the action (optional)
+            logAction($conn, $userId, "Added Product Type", "User added new product type: $new_product_type");
+
+            echo json_encode(['success' => 'Product type added successfully']);
+            exit;
+        } catch (PDOException $e) {
+            echo json_encode(['error' => 'Database error: ' . $e->getMessage()]);
+            exit;
         }
     }
 }
@@ -62,7 +88,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 // Unified fetch function for both initial load and AJAX
 function fetchProducts($conn, $searchTerm = '', $orderBy = '', $filterBy = '', $subFilter = '') {
     try {
-        $sql = "SELECT p.*, u.username AS created_by FROM products p LEFT JOIN users u ON p.usersId = u.usersId WHERE 1=1";
+        $sql = "SELECT p.*, s.CompanyName AS supplier_company_name 
+                FROM products p 
+                LEFT JOIN supplier s ON p.supplier_name = s.CompanyName 
+                WHERE 1=1";
         $whereClause = '';
         $orderClause = " ORDER BY p.id ASC";
         $params = array();
@@ -71,7 +100,7 @@ function fetchProducts($conn, $searchTerm = '', $orderBy = '', $filterBy = '', $
         if (!empty($searchTerm)) {
             $whereClause .= " AND (p.product_name LIKE :search 
                               OR p.product_type LIKE :search 
-                              OR p.supplier_name LIKE :search 
+                              OR s.CompanyName LIKE :search 
                               OR p.id LIKE :search 
                               OR p.color LIKE :search)";
             $params[':search'] = "%$searchTerm%";
@@ -311,8 +340,8 @@ if (isset($products['error'])) {
             <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
             <ul class="submenu">
                 <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
                 <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
             </ul>
         </li>
         <li class="dropdown">
@@ -382,25 +411,24 @@ if (isset($products['error'])) {
                     <th>Prod ID</th>
                     <th>Product</th>
                     <th>Type Name</th>
-                    <th>Supplier Name</th>
+                    <th>Company Name</th> <!-- Changed from Supplier Name -->
                     <th>Price</th>
                     <th>Stock</th>
                     <th>Status</th>
-                    <th>Created By</th>
                     <th>Created Date</th>
                     <th>Action</th>
                 </tr>
             </thead>
             <tbody id="productTableBody">
                 <?php if (isset($error)): ?>
-                    <tr><td colspan="10" class="text-center text-danger"><?= htmlspecialchars($error) ?></td></tr>
+                    <tr><td colspan="9" class="text-center text-danger"><?= htmlspecialchars($error) ?></td></tr>
                 <?php elseif (!empty($products)): ?>
                     <?php foreach ($products as $product): ?>
                         <tr>
                             <td><?= htmlspecialchars($product['id']) ?></td>
                             <td><?= htmlspecialchars($product['product_name']) ?></td>
                             <td><?= htmlspecialchars($product['product_type']) ?></td>
-                            <td><?= htmlspecialchars($product['supplier_name']) ?></td>
+                            <td><?= htmlspecialchars($product['supplier_company_name'] ?? $product['supplier_name']) ?></td> <!-- Display CompanyName -->
                             <td>₱<?= number_format($product['price'], 2) ?></td>
                             <td>
                                 <?= htmlspecialchars($product['stock']) ?>
@@ -409,66 +437,24 @@ if (isset($products['error'])) {
                                 <?php endif; ?>
                             </td>
                             <td><?= htmlspecialchars($product['status']) ?></td>
-                            <td><?= htmlspecialchars($product['created_by'] ?? 'Unknown') ?></td>
                             <td><?= htmlspecialchars($product['created_at'] ?? 'N/A') ?></td>
                             <td>
                                 <div class="d-flex align-items-center">
                                     <button class="btn btn-warning btn-sm me-1" data-product-id="<?php echo $product['id']; ?>" data-toggle="modal" data-target="#editProductModal">
                                         <i class="fas fa-edit"></i>
                                     </button>
+                                    <button class="btn btn-success btn-sm me-1" data-toggle="modal" data-target="#addProductTypeModal">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
                                 </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
-                    <tr><td colspan="10" class="text-center">No products found</td></tr>
+                    <tr><td colspan="9" class="text-center">No products found</td></tr>
                 <?php endif; ?>
             </tbody>
         </table>
-    </div>
-
-    <!-- New Product Form -->
-    <div id="newProductForm" style="display: none; position: absolute; top: 50%; left: 55%; transform: translate(-50%, -50%); background: lightblue; padding: 40px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); z-index: 1000; width: 1000px; height: 500px;">
-        <form method="POST" enctype="multipart/form-data">
-            <button id="closeFormBtn" style="position: absolute; top: 0px; right: 10px; background: none; border: none; font-size: 40px; cursor: pointer;">×</button>
-            <h2 class="text-center mb-4">Add New Product</h2>
-            <div class="form-group d-flex align-items-center mb-3">
-                <label for="productName" class="mr-3" style="width: 150px;">Product Name</label>
-                <input type="text" class="form-control" id="productName" name="productName" placeholder="Enter product name" style="width: 350px; height: 50px;" required>
-            </div>
-            <div class="form-group d-flex align-items-center mb-3">
-                <label for="productType" class="mr-3" style="width: 150px;">Product Type</label>
-                <input type="text" class="form-control" id="productType" name="productType" placeholder="Enter product type" style="width: 350px; height: 50px;" required>
-            </div>
-            <div class="form-group d-flex align-items-center mb-3">
-                <label for="supplierName" class="mr-3" style="width: 150px;">Supplier Name</label>
-                <input type="text" class="form-control" id="supplierName" name="supplierName" placeholder="Enter supplier name" style="width: 350px; height: 50px;" required>
-            </div>
-            <div class="form-group d-flex align-items-center mb-3">
-                <label for="price" class="mr-3" style="width: 150px;">Price</label>
-                <input type="number" class="form-control" id="price" name="price" placeholder="Enter price" style="width: 350px; height: 50px;" step="0.01" min="0" required>
-            </div>
-            <div class="form-group d-flex align-items-center mb-3">
-                <label for="stock" class="mr-3" style="width: 150px;">Stock</label>
-                <input type="number" class="form-control" id="stock" name="stock" placeholder="Enter stock" style="width: 350px; height: 50px;" min="0" required>
-            </div>
-            <div class="form-group d-flex align-items-center mb-3">
-                <label for="status" class="mr-3" style="width: 150px;">Status</label>
-                <select class="form-control" id="status" name="status" style="width: 350px; height: 50px;" required>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                </select>
-            </div>
-            <div id="imageContainer" style="position: absolute; top: 120px; right: 110px; width: 200px; height: 200px; border: 2px solid rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; overflow: hidden; border-radius: 8px;">
-                <img id="previewImage" src="#" alt="Image Preview" style="display: none; width: 100%; height: 100%; object-fit: cover; cursor: pointer;">
-                <input type="file" name="productImage" id="productImage" accept="image/*" style="display: none;">
-                <label for="productImage" id="uploadLabel" style="cursor: pointer; background-color: #6c757d; color: white; padding: 10px 15px; border-radius: 5px; font-size: 14px; width: 90%; text-align: center;">
-                    Upload Image
-                </label>
-            </div>
-            <button type="submit" class="btn btn-primary" style="position: absolute; top: 400px; left: 800px;">Submit</button>
-            <label for="productImage" class="mb-2" style="position: absolute; top: 80px; right: 180px; font-size: 25px;">Edit Image</label>
-        </form>
     </div>
 
     <!-- Edit Product Modal -->
@@ -493,7 +479,7 @@ if (isset($products['error'])) {
                             <input type="text" class="form-control" id="editProductType" name="product_type" required>
                         </div>
                         <div class="form-group">
-                            <label for="editSupplierName">Supplier Name</label>
+                            <label for="editSupplierName">Company Name</label> <!-- Changed label -->
                             <input type="text" class="form-control" id="editSupplierName" name="supplier_name" required>
                         </div>
                         <div class="form-group">
@@ -516,6 +502,32 @@ if (isset($products['error'])) {
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
                     <button type="button" class="btn btn-primary" id="saveEditButton">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Product Type Modal -->
+    <div class="modal fade" id="addProductTypeModal" tabindex="-1" role="dialog" aria-labelledby="addProductTypeModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addProductTypeModalLabel">Add New Product Type</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">×</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="addProductTypeForm">
+                        <div class="form-group">
+                            <label for="newProductType">Product Type</label>
+                            <input type="text" class="form-control" id="newProductType" name="new_product_type" required placeholder="Enter new product type">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="saveProductTypeButton">Save</button>
                 </div>
             </div>
         </div>
@@ -556,31 +568,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // New Product Form handling
-    document.getElementById('closeFormBtn').addEventListener('click', function() {
-        document.getElementById('newProductForm').style.display = 'none';
-    });
+    // Redirect to NewInventoryProduct.php on New button click
     document.getElementById('newProductBtn').addEventListener('click', function() {
-        var form = document.getElementById('newProductForm');
-        form.style.display = form.style.display === 'none' ? 'block' : 'none';
-    });
-    const productImageInput = document.getElementById('productImage');
-    const previewImage = document.getElementById('previewImage');
-    const uploadLabel = document.getElementById('uploadLabel');
-    productImageInput.addEventListener('change', function() {
-        const file = this.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function() {
-                previewImage.src = reader.result;
-                previewImage.style.display = 'block';
-                if (uploadLabel) uploadLabel.style.display = 'none';
-            };
-            reader.readAsDataURL(file);
-        }
-    });
-    previewImage.addEventListener('click', () => {
-        productImageInput.click();
+        window.location.href = 'NewInventory.php';
     });
 
     // Edit Product Modal
@@ -595,7 +585,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 $('#editProductId').val(data.id);
                 $('#editProductName').val(data.product_name);
                 $('#editProductType').val(data.product_type);
-                $('#editSupplierName').val(data.supplier_name);
+                $('#editSupplierName').val(data.supplier_company_name || data.supplier_name); // Use CompanyName
                 $('#editPrice').val(data.price);
                 $('#editStock').val(data.stock);
                 $('#editStatus').val(data.status);
@@ -626,6 +616,30 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // Add Product Type Modal
+    document.getElementById('saveProductTypeButton').addEventListener('click', function() {
+        var form = document.getElementById('addProductTypeForm');
+        var data = new FormData(form);
+        fetch('Inventory.php', {
+            method: 'POST',
+            body: data
+        })
+        .then(response => response.json()) // Parse JSON response
+        .then(data => {
+            if (data.success) {
+                alert(data.success); // Show success message
+                $('#addProductTypeModal').modal('hide');
+                // Optionally, refresh the table or update the product type dropdown here
+            } else {
+                alert(data.error || 'Error adding product type'); // Show error message
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error adding product type');
+        });
+    });
+
     // Search and table update functionality
     const searchInput = document.getElementById('searchInput');
     const filterBySelect = document.getElementById('filterBySelect');
@@ -644,10 +658,10 @@ document.addEventListener('DOMContentLoaded', function() {
         ],
         'product-supplier': [
             { value: '', text: 'Select Supplier' },
-            { value: 'supplier-a', text: 'Supplier A' },
-            { value: 'supplier-b', text: 'Supplier B' },
-            { value: 'supplier-c', text: 'Supplier C' },
-            { value: 'supplier-d', text: 'Supplier D' }
+            { value: 'Supplier A', text: 'Supplier A' }, // Update these to match CompanyName values
+            { value: 'Supplier B', text: 'Supplier B' },
+            { value: 'Supplier C', text: 'Supplier C' },
+            { value: 'Supplier D', text: 'Supplier D' }
         ],
         'color': [
             { value: '', text: 'Select Color' },
@@ -710,7 +724,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 tbody.innerHTML = '';
 
                 if (products.error) {
-                    tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger">${products.error}</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">${products.error}</td></tr>`;
                     return;
                 }
 
@@ -721,19 +735,21 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td>${product.id}</td>
                                 <td>${product.product_name}</td>
                                 <td>${product.product_type || ''}</td>
-                                <td>${product.supplier_name || ''}</td>
+                                <td>${product.supplier_company_name || product.supplier_name || ''}</td> <!-- Display CompanyName -->
                                 <td>₱${Number(product.price).toFixed(2)}</td>
                                 <td>
                                     ${product.stock}
                                     ${product.stock < 10 ? '<span class="low-stock"> (Low Stock)</span>' : ''}
                                 </td>
                                 <td>${product.status}</td>
-                                <td>${product.created_by || 'Unknown'}</td>
                                 <td>${product.created_at || 'N/A'}</td>
                                 <td>
                                     <div class="d-flex align-items-center">
                                         <button class="btn btn-warning btn-sm me-1" data-product-id="${product.id}" data-toggle="modal" data-target="#editProductModal">
                                             <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-success btn-sm me-1" data-toggle="modal" data-target="#addProductTypeModal">
+                                            <i class="fas fa-plus"></i>
                                         </button>
                                     </div>
                                 </td>
@@ -742,12 +758,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         tbody.innerHTML += row;
                     });
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="10" class="text-center">No products found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="9" class="text-center">No products found</td></tr>';
                 }
             },
             error: function(xhr, status, error) {
                 console.error('AJAX error:', status, error);
-                document.getElementById('productTableBody').innerHTML = '<tr><td colspan="10" class="text-center text-danger">Error loading products</td></tr>';
+                document.getElementById('productTableBody').innerHTML = '<tr><td colspan="9" class="text-center text-danger">Error loading products</td></tr>';
             }
         });
     }

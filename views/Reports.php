@@ -99,8 +99,8 @@ ob_end_flush();
                 <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
                 <ul class="submenu">
                     <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
                     <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
                 </ul>
             </li>
             <li class="dropdown">
