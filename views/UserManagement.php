@@ -20,7 +20,7 @@ $filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : (isset($_GET['filte
 // Unified fetch function for users
 function fetchUsers($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
     try {
-        $sql = "SELECT usersId, firstname, email, job_title, username, created_at, status FROM users WHERE 1=1";
+        $sql = "SELECT usersId, firstname, email, role, username, created_at, status FROM users WHERE 1=1";
         $params = [];
         $orderClause = " ORDER BY created_at DESC"; // Default order
 
@@ -29,7 +29,7 @@ function fetchUsers($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
             $sql .= " AND (usersId LIKE :search 
                         OR firstname LIKE :search 
                         OR email LIKE :search 
-                        OR job_title LIKE :search 
+                        OR role LIKE :search 
                         OR username LIKE :search)";
             $params[':search'] = "%$searchTerm%";
         }
@@ -37,10 +37,10 @@ function fetchUsers($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
         // Filter logic
         switch ($filterBy) {
             case 'job-admin':
-                $sql .= " AND job_title = 'Admin'";
+                $sql .= " AND role = 'Admin'";
                 break;
             case 'job-manager':
-                $sql .= " AND job_title = 'Manager'";
+                $sql .= " AND role = 'Manager'";
                 break;
             case 'has-email':
                 $sql .= " AND email IS NOT NULL AND email != ''";
@@ -78,11 +78,11 @@ function fetchUsers($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
             case 'email-desc':
                 $orderClause = " ORDER BY email DESC";
                 break;
-            case 'job_title-asc':
-                $orderClause = " ORDER BY job_title ASC";
+            case 'role-asc':
+                $orderClause = " ORDER BY role ASC";
                 break;
-            case 'job_title-desc':
-                $orderClause = " ORDER BY job_title DESC";
+            case 'role-desc':
+                $orderClause = " ORDER BY role DESC";
                 break;
             case 'username-asc':
                 $orderClause = " ORDER BY username ASC";
@@ -115,21 +115,81 @@ function fetchUsers($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
+        error_log("Fetch users error: " . $e->getMessage()); // Log to error log
         return ['error' => "Database error: " . $e->getMessage()];
     }
 }
 
-// Handle AJAX requests
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action']) && $_POST['action'] === 'search') {
-        $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
-        $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
-        $filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : '';
-        $users = fetchUsers($conn, $searchTerm, $orderBy, $filterBy);
-        header('Content-Type: application/json');
-        echo json_encode($users);
+// Fetch single user details for edit modal
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['user_id'])) {
+    try {
+        $stmt = $conn->prepare("SELECT usersId, firstname, email, role, username, status FROM users WHERE usersId = :user_id");
+        $stmt->bindParam(':user_id', $_GET['user_id'], PDO::PARAM_INT);
+        $stmt->execute();
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode($user ?: ['error' => 'User not found']);
+        exit;
+    } catch (PDOException $e) {
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode(['error' => "Database error: " . $e->getMessage()]);
         exit;
     }
+}
+
+// Handle user update
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update') {
+    $user_id = $_POST['user_id'] ?? '';
+    $firstname = $_POST['firstname'] ?? '';
+    $email = $_POST['email'] ?? '';
+    $role = $_POST['role'] ?? '';
+    $username = $_POST['username'] ?? '';
+    $status = $_POST['status'] ?? '';
+    $password = $_POST['password'] ?? '';
+
+    try {
+        $sql = "UPDATE users SET firstname = :firstname, email = :email, role = :role, username = :username, status = :status";
+        $params = [
+            ':user_id' => $user_id,
+            ':firstname' => $firstname,
+            ':email' => $email,
+            ':role' => $role,
+            ':username' => $username,
+            ':status' => $status
+        ];
+
+        if (!empty($password)) {
+            $password_hash = password_hash($password, PASSWORD_DEFAULT);
+            $sql .= ", password = :password";
+            $params[':password'] = $password_hash;
+        }
+
+        $sql .= " WHERE usersId = :user_id";
+        $stmt = $conn->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->execute();
+
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode(['success' => true]);
+        exit;
+    } catch (PDOException $e) {
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode(['error' => "Database error: " . $e->getMessage()]);
+        exit;
+    }
+}
+
+// Handle AJAX requests for table data
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'search') {
+    $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
+    $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
+    $filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : '';
+    $users = fetchUsers($conn, $searchTerm, $orderBy, $filterBy);
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode($users, JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
 // Initial page load
@@ -179,8 +239,9 @@ if (isset($users['error'])) {
             <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
             <ul class="submenu">
                 <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
                 <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                <li><a href="Returns.php" style="color: white; text-decoration: none;">Returns</a></li>
             </ul>
         </li>
         <li class="dropdown">
@@ -190,11 +251,13 @@ if (isset($users['error'])) {
                 <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
             </ul>
         </li>
-        <li>
-            <a href="Reports.php" style="text-decoration: none; color: inherit;">
-                <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
-            </a>
-        </li>
+        <li class="dropdown">
+    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span><i class="fa fa-chevron-down toggle-btn"></i>
+    <ul class="submenu">
+        <li><a href="Reports.php" style="color: white; text-decoration: none;">Sales</a></li>
+        <li><a href="InventoryReports.php" style="color: white; text-decoration: none;">Inventory</a></li>
+    </ul>
+</li>
         <li>
             <a href="logout.php" style="text-decoration: none; color: inherit;">
                 <i class="fas fa-sign-out-alt"></i><span> Log out</span>
@@ -202,6 +265,7 @@ if (isset($users['error'])) {
         </li>
     </ul>
 </div>
+
 
 <div class="main-content">
     <h1>User Management</h1>
@@ -217,8 +281,8 @@ if (isset($users['error'])) {
                 <option value="firstname-desc" <?php if ($orderBy === 'firstname-desc') echo 'selected'; ?>>First Name (Z → A)</option>
                 <option value="email-asc" <?php if ($orderBy === 'email-asc') echo 'selected'; ?>>Email (A → Z)</option>
                 <option value="email-desc" <?php if ($orderBy === 'email-desc') echo 'selected'; ?>>Email (Z → A)</option>
-                <option value="job_title-asc" <?php if ($orderBy === 'job_title-asc') echo 'selected'; ?>>Job Title (A → Z)</option>
-                <option value="job_title-desc" <?php if ($orderBy === 'job_title-desc') echo 'selected'; ?>>Job Title (Z → A)</option>
+                <option value="role-asc" <?php if ($orderBy === 'role-asc') echo 'selected'; ?>>Role (A → Z)</option>
+                <option value="role-desc" <?php if ($orderBy === 'role-desc') echo 'selected'; ?>>Role (Z → A)</option>
                 <option value="username-asc" <?php if ($orderBy === 'username-asc') echo 'selected'; ?>>Username (A → Z)</option>
                 <option value="username-desc" <?php if ($orderBy === 'username-desc') echo 'selected'; ?>>Username (Z → A)</option>
                 <option value="status-asc" <?php if ($orderBy === 'status-asc') echo 'selected'; ?>>Status (A → Z)</option>
@@ -228,8 +292,8 @@ if (isset($users['error'])) {
             </select>
             <select class="btn btn-outline-secondary" name="filterBy" id="filterBySelect">
                 <option value="">Filter By</option>
-                <option value="job-admin" <?php if ($filterBy === 'job-admin') echo 'selected'; ?>>Job Title: Admin</option>
-                <option value="job-manager" <?php if ($filterBy === 'job-manager') echo 'selected'; ?>>Job Title: Manager</option>
+                <option value="job-admin" <?php if ($filterBy === 'job-admin') echo 'selected'; ?>>Role: Admin</option>
+                <option value="job-manager" <?php if ($filterBy === 'job-manager') echo 'selected'; ?>>Role: Manager</option>
                 <option value="has-email" <?php if ($filterBy === 'has-email') echo 'selected'; ?>>Has Email</option>
                 <option value="no-email" <?php if ($filterBy === 'no-email') echo 'selected'; ?>>No Email</option>
                 <option value="recently-added" <?php if ($filterBy === 'recently-added') echo 'selected'; ?>>Recently Added (Last 30 Days)</option>
@@ -246,7 +310,7 @@ if (isset($users['error'])) {
                 <th>User ID</th>
                 <th>First Name</th>
                 <th>Email</th>
-                <th>Job Title</th>
+                <th>Role</th>
                 <th>Username</th>
                 <th>Created at</th>
                 <th>Status</th>
@@ -263,14 +327,16 @@ if (isset($users['error'])) {
                     echo "<td>" . htmlspecialchars($user['usersId']) . "</td>";
                     echo "<td>" . htmlspecialchars($user['firstname']) . "</td>";
                     echo "<td>" . htmlspecialchars($user['email']) . "</td>";
-                    echo "<td>" . htmlspecialchars($user['job_title']) . "</td>";
+                    echo "<td>" . htmlspecialchars($user['role']) . "</td>";
                     echo "<td>" . htmlspecialchars($user['username']) . "</td>";
                     echo "<td>" . htmlspecialchars($user['created_at']) . "</td>";
                     echo "<td>" . htmlspecialchars($user['status']) . "</td>";
                     echo "<td>";
-                    echo "<button class='btn btn-warning btn-sm edit-btn' data-user-id='" . htmlspecialchars($user['usersId']) . "'>";
+                    echo "<div class='d-flex align-items-center'>";
+                    echo "<button class='btn btn-warning btn-sm me-1' data-user-id='" . htmlspecialchars($user['usersId']) . "' data-bs-toggle='modal' data-bs-target='#editUserModal' title='Edit'>";
                     echo "<i class='fas fa-edit'></i>";
                     echo "</button>";
+                    echo "</div>";
                     echo "</td>";
                     echo "</tr>";
                 }
@@ -280,6 +346,54 @@ if (isset($users['error'])) {
             ?>
         </tbody>
     </table>
+
+    <!-- Edit User Modal -->
+    <div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editUserModalLabel">Edit User</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editUserForm">
+                        <input type="hidden" id="editUserId" name="user_id">
+                        <div class="form-group">
+                            <label for="editFirstName">First Name</label>
+                            <input type="text" class="form-control" id="editFirstName" name="firstname" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editEmail">Email</label>
+                            <input type="email" class="form-control" id="editEmail" name="email" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editRole">Role</label>
+                            <input type="text" class="form-control" id="editRole" name="role" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editUsername">Username</label>
+                            <input type="text" class="form-control" id="editUsername" name="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editPassword">Password (leave blank to keep unchanged)</label>
+                            <input type="password" class="form-control" id="editPassword" name="password" placeholder="Enter new password">
+                        </div>
+                        <div class="form-group">
+                            <label for="editStatus">Status</label>
+                            <select class="form-control" id="editStatus" name="status" required>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="saveEditButton">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -303,7 +417,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Updating table with:', { searchTerm, orderBy, filterBy });
 
         $.ajax({
-            url: window.location.pathname,
+            url: 'UserManagement.php', // Hardcoded for consistency
             method: 'POST',
             dataType: 'json',
             data: {
@@ -329,14 +443,16 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td>${user.usersId}</td>
                                 <td>${user.firstname || ''}</td>
                                 <td>${user.email || ''}</td>
-                                <td>${user.job_title || ''}</td>
+                                <td>${user.role || ''}</td>
                                 <td>${user.username || ''}</td>
                                 <td>${user.created_at || ''}</td>
                                 <td>${user.status || ''}</td>
                                 <td>
-                                    <button class="btn btn-warning btn-sm edit-btn" data-user-id="${user.usersId}">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
+                                    <div class="d-flex align-items-center">
+                                        <button class="btn btn-warning btn-sm me-1" data-user-id="${user.usersId}" data-bs-toggle="modal" data-bs-target="#editUserModal" title="Edit">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         `;
@@ -346,16 +462,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No users available.</td></tr>';
                 }
 
-                // Attach edit button listeners after table update
-                attachEditButtonListeners();
-
                 // Update select elements to reflect current values
                 document.querySelector('select[name="orderBy"]').value = orderBy;
                 document.querySelector('select[name="filterBy"]').value = filterBy;
+
+                // Reattach event listeners for buttons
+                attachButtonListeners();
             },
             error: function(xhr, status, error) {
-                console.error('AJAX error:', status, error);
-                document.getElementById('userTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error loading users</td></tr>';
+                console.error('AJAX error:', status, error, xhr.responseText);
+                document.getElementById('userTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error loading users: ' + xhr.status + ' - ' + xhr.statusText + '</td></tr>';
             }
         });
     }
@@ -370,19 +486,73 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelector('select[name="orderBy"]').addEventListener('change', updateTable);
     document.querySelector('select[name="filterBy"]').addEventListener('change', updateTable);
 
-    // Edit button functionality
-    function attachEditButtonListeners() {
-        document.querySelectorAll('.edit-btn').forEach(button => {
-            button.addEventListener('click', function() {
+    // Function to attach event listeners to buttons
+    function attachButtonListeners() {
+        document.querySelectorAll('.btn-warning').forEach(btn => {
+            btn.addEventListener('click', function() {
                 const userId = this.getAttribute('data-user-id');
-                alert('Edit functionality for User ID ' + userId + ' is not yet implemented.');
-                // Add logic here to open an edit modal or redirect to an edit page
+                console.log('Edit clicked for user ID:', userId);
+
+                // Fetch user details and populate modal
+                $.ajax({
+                    url: 'UserManagement.php',
+                    method: 'GET',
+                    dataType: 'json',
+                    data: { user_id: userId },
+                    success: function(user) {
+                        if (user.error) {
+                            alert(user.error);
+                            $('#editUserModal').modal('hide');
+                        } else {
+                            $('#editUserId').val(user.usersId);
+                            $('#editFirstName').val(user.firstname);
+                            $('#editEmail').val(user.email);
+                            $('#editRole').val(user.role);
+                            $('#editUsername').val(user.username);
+                            $('#editStatus').val(user.status);
+                            $('#editPassword').val(''); // Clear password field
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('AJAX error:', status, error);
+                        alert('Error fetching user details');
+                        $('#editUserModal').modal('hide');
+                    }
+                });
             });
         });
     }
 
-    // Initial table load
+    // Save edit button functionality
+    document.getElementById('saveEditButton').addEventListener('click', function() {
+        const formData = $('#editUserForm').serializeArray();
+        const data = { action: 'update' };
+        formData.forEach(item => data[item.name] = item.value);
+
+        $.ajax({
+            url: 'UserManagement.php',
+            method: 'POST',
+            dataType: 'json',
+            data: data,
+            success: function(response) {
+                if (response.success) {
+                    alert('User updated successfully!');
+                    $('#editUserModal').modal('hide');
+                    updateTable(); // Refresh the table
+                } else {
+                    alert(response.error || 'Error updating user');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error:', status, error);
+                alert('Error saving changes');
+            }
+        });
+    });
+
+    // Initial table load and button listener attachment
     updateTable();
+    attachButtonListeners();
 });
 </script>
 </body>

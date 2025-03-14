@@ -4,10 +4,25 @@ include '../database/utils.php';
 session_start();
 
 $userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
-// Only log if last log was more than X seconds ago
-if (!isset($_SESSION['last_Customers_log']) || (time() - $_SESSION['last_Customers_log']) > 300) { // 300 seconds = 5 minutes
+// Only log if last log was more than 5 minutes ago
+if (!isset($_SESSION['last_Customers_log']) || (time() - $_SESSION['last_Customers_log']) > 300) {
     logAction($conn, $userId, "Accessed Customer Page", "User accessed the Customers page");
     $_SESSION['last_Customers_log'] = time();
+}
+
+// Fetch distinct company names and payment terms from the database
+try {
+    $company_stmt = $conn->prepare("SELECT DISTINCT CompanyName FROM Customers WHERE CompanyName IS NOT NULL AND CompanyName != '' ORDER BY CompanyName ASC");
+    $company_stmt->execute();
+    $company_names = $company_stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    $payment_stmt = $conn->prepare("SELECT DISTINCT PaymentTerms FROM Customers WHERE PaymentTerms IS NOT NULL AND PaymentTerms != '' ORDER BY PaymentTerms ASC");
+    $payment_stmt->execute();
+    $payment_terms = $payment_stmt->fetchAll(PDO::FETCH_COLUMN);
+} catch (PDOException $e) {
+    $company_names = [];
+    $payment_terms = [];
+    error_log("Error fetching filter data: " . $e->getMessage());
 }
 
 // Handle form submission for editing or adding customers
@@ -59,6 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
         $orderBy = isset($_POST['order_by']) ? $_POST['order_by'] : '';
         $filterBy = isset($_POST['filter_by']) ? $_POST['filter_by'] : '';
+        $subFilter = isset($_POST['sub_filter']) ? $_POST['sub_filter'] : '';
 
         $query = "SELECT * FROM Customers WHERE 1=1";
         $params = [];
@@ -74,14 +90,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         if ($filterBy) {
             switch ($filterBy) {
-                case 'hasPhone':
-                    $query .= " AND Phone IS NOT NULL AND Phone != ''";
+                case 'company-name':
+                    if (!empty($subFilter)) {
+                        $query .= " AND CompanyName = :subFilter";
+                        $params[':subFilter'] = $subFilter;
+                    }
                     break;
-                case 'hasEmail':
-                    $query .= " AND Email IS NOT NULL AND Email != ''";
-                    break;
-                case 'hasAddress':
-                    $query .= " AND BillingAddress1 IS NOT NULL AND BillingAddress1 != ''";
+                case 'payment-terms':
+                    if (!empty($subFilter)) {
+                        $query .= " AND PaymentTerms = :subFilter";
+                        $params[':subFilter'] = $subFilter;
+                    }
                     break;
             }
         }
@@ -204,47 +223,59 @@ try {
         .modal-lg-custom {
             max-width: 900px;
         }
+        #subFilterContainer {
+            margin-left: 10px;
+            display: none;
+        }
+        #subFilterSelect {
+            appearance: auto;
+            padding: 5px;
+            min-width: 150px;
+        }
     </style>
 </head>
 <body>
 <div class="left-sidebar">
     <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
     <ul class="menu">
-    <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
-            <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
-                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
-                    <li><a href="Deliverytable.php">Delivery</a></li>
-                </ul>
-            </li>
-            <li class="dropdown">
-                <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                    <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
-                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
-                </ul>
-            </li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                    <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
-                </ul>
-            </li>
-            <li>
-                <a href="Reports.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
-                </a>
-            </li>
-            <li>
-                <a href="logout.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-sign-out-alt"></i><span> Log out</span>
-                </a>
-            </li>
+        <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
+        <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
+                <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
+                <li><a href="Deliverytable.php">Delivery</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+            <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
+                <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                <li><a href="Returns.php" style="color: white; text-decoration: none;">Returns</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
+                <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span><i class="fa fa-chevron-down toggle-btn"></i>
+    <ul class="submenu">
+        <li><a href="Reports.php" style="color: white; text-decoration: none;">Sales</a></li>
+        <li><a href="InventoryReports.php" style="color: white; text-decoration: none;">Inventory</a></li>
+    </ul>
+</li>
+        <li>
+            <a href="logout.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-sign-out-alt"></i><span> Log out</span>
+            </a>
+        </li>
     </ul>
 </div>
 
@@ -260,21 +291,27 @@ try {
             <input type="text" class="form-control" placeholder="Search..." id="searchInput" name="search">
         </div>
         <button class="btn btn-dark mr-2" id="newCustomerBtn" style="margin-right: 10px;">New <i class="fa fa-plus"></i></button>
-        <select class="btn btn-outline-secondary mr-2" style="margin-right: 10px;" id="orderBySelect">
-            <option value="">Order By</option>
-            <option value="CompanyName_asc">Ascending (A → Z)</option>
-            <option value="CompanyName_desc">Descending (Z → A)</option>
-            <option value="Phone_asc">Phone (Ascending)</option>
-            <option value="Phone_desc">Phone (Descending)</option>
-            <option value="CreatedAt_desc">Newest</option>
-            <option value="CreatedAt_asc">Oldest</option>
-        </select>
-        <select class="btn btn-outline-secondary" id="filterBySelect">
-            <option value="">Filtered By</option>
-            <option value="hasPhone">Has Phone</option>
-            <option value="hasEmail">Has Email</option>
-            <option value="hasAddress">Has Address</option>
-        </select>
+        <form name="filterForm" id="filterForm" method="post" class="d-flex align-items-center">
+            <select class="btn btn-outline-secondary mr-2" style="margin-right: 10px;" id="orderBySelect">
+                <option value="">Order By</option>
+                <option value="CompanyName_asc">Ascending (A → Z)</option>
+                <option value="CompanyName_desc">Descending (Z → A)</option>
+                <option value="Phone_asc">Phone (Ascending)</option>
+                <option value="Phone_desc">Phone (Descending)</option>
+                <option value="CreatedAt_desc">Newest</option>
+                <option value="CreatedAt_asc">Oldest</option>
+            </select>
+            <select class="btn btn-outline-secondary mr-2" id="filterBySelect" onchange="handleFilterChange()">
+                <option value="">Filter By</option>
+                <option value="company-name">Company Name</option>
+                <option value="payment-terms">Payment Terms</option>
+            </select>
+            <div id="subFilterContainer">
+                <select id="subFilterSelect" class="btn btn-outline-secondary" onchange="updateTable()">
+                    <!-- Options populated by JavaScript -->
+                </select>
+            </div>
+        </form>
     </div>
 
     <div class="table-container">
@@ -424,16 +461,53 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Search functionality
+    // Search and filter functionality
     const searchInput = document.getElementById('searchInput');
     const orderBySelect = document.getElementById('orderBySelect');
     const filterBySelect = document.getElementById('filterBySelect');
+    const subFilterContainer = document.getElementById('subFilterContainer');
+    const subFilterSelect = document.getElementById('subFilterSelect');
     let searchTimeout;
+
+    // Pass company names and payment terms from PHP to JavaScript
+    const companyNames = <?php echo json_encode($company_names); ?>;
+    const paymentTerms = <?php echo json_encode($payment_terms); ?>;
+
+    const subFilters = {
+        'company-name': [
+            { value: '', text: 'Select Company Name' },
+            ...companyNames.map(name => ({ value: name, text: name }))
+        ],
+        'payment-terms': [
+            { value: '', text: 'Select Payment Terms' },
+            ...paymentTerms.map(term => ({ value: term, text: term }))
+        ]
+    };
+
+    function handleFilterChange() {
+        const filterValue = filterBySelect.value;
+        subFilterContainer.style.display = filterValue ? 'inline-block' : 'none';
+        
+        subFilterSelect.innerHTML = '';
+        if (filterValue) {
+            const options = subFilters[filterValue];
+            options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.value;
+                option.text = opt.text;
+                subFilterSelect.appendChild(option);
+            });
+        }
+        updateTable();
+    }
 
     function updateTable() {
         const searchTerm = searchInput.value.trim();
         const orderBy = orderBySelect.value;
         const filterBy = filterBySelect.value;
+        const subFilter = filterBy ? subFilterSelect.value : '';
+
+        console.log('Updating table with:', { searchTerm, orderBy, filterBy, subFilter }); // Debug log
 
         $.ajax({
             url: 'Customers.php',
@@ -443,7 +517,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 action: 'search',
                 search: searchTerm,
                 order_by: orderBy,
-                filter_by: filterBy
+                filter_by: filterBy,
+                sub_filter: subFilter
             },
             success: function(customers) {
                 console.log('Customers received:', customers); // Debug log
@@ -499,7 +574,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Sorting and filtering listeners
     orderBySelect.addEventListener('change', updateTable);
-    filterBySelect.addEventListener('change', updateTable);
+    filterBySelect.addEventListener('change', handleFilterChange);
+    subFilterSelect.addEventListener('change', updateTable);
 
     // Edit button functionality
     function attachEditButtonListeners() {
@@ -551,6 +627,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Initial table load and event listeners
+    handleFilterChange();
     updateTable();
     attachEditButtonListeners();
 });

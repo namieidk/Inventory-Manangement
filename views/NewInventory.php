@@ -130,13 +130,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
                 <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
                 <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
                 <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                <li><a href="Returns.php" style="color: white; text-decoration: none;">Returns</a></li>
             </ul>
         </li>
         <li class="dropdown">
             <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
             <ul class="submenu">
                 <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
                 <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
             </ul>
         </li>
@@ -152,6 +152,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         </li>
     </ul>
 </div>
+
 <div class="container">
     <h1>Add New Product to Inventory</h1>
     <form method="post" id="newProductForm">

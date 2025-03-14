@@ -342,6 +342,7 @@ try {
                 <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
                 <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
                 <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                <li><a href="Returns.php" style="color: white; text-decoration: none;">Returns</a></li>
             </ul>
         </li>
         <li class="dropdown">
@@ -351,11 +352,13 @@ try {
                 <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
             </ul>
         </li>
-        <li>
-            <a href="Reports.php" style="text-decoration: none; color: inherit;">
-                <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
-            </a>
-        </li>
+        <li class="dropdown">
+    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span><i class="fa fa-chevron-down toggle-btn"></i>
+    <ul class="submenu">
+        <li><a href="Reports.php" style="color: white; text-decoration: none;">Sales</a></li>
+        <li><a href="InventoryReport.php" style="color: white; text-decoration: none;">Inventory</a></li>
+    </ul>
+</li>
         <li>
             <a href="logout.php" style="text-decoration: none; color: inherit;">
                 <i class="fas fa-sign-out-alt"></i><span> Log out</span>
@@ -363,6 +366,8 @@ try {
         </li>
     </ul>
 </div>
+
+
 
 <div class="main-content">
     <div class="header-container">

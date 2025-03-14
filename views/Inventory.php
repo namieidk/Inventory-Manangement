@@ -4,8 +4,8 @@ include '../database/utils.php';
 session_start();
 
 $userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
-// Only log if last log was more than X seconds ago
-if (!isset($_SESSION['last_inventory_log']) || (time() - $_SESSION['last_inventory_log']) > 300) { // 300 seconds = 5 minutes
+// Only log if last log was more than 5 minutes ago
+if (!isset($_SESSION['last_inventory_log']) || (time() - $_SESSION['last_inventory_log']) > 300) {
     logAction($conn, $userId, "Accessed Inventory Page", "User accessed the inventory page");
     $_SESSION['last_inventory_log'] = time();
 }
@@ -14,6 +14,26 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 $invoices = [];
+
+// Fetch product types from the database
+try {
+    $product_types_stmt = $conn->prepare("SELECT DISTINCT product_type FROM ProductType ORDER BY product_type ASC");
+    $product_types_stmt->execute();
+    $product_types = $product_types_stmt->fetchAll(PDO::FETCH_COLUMN);
+} catch (PDOException $e) {
+    $product_types = [];
+    error_log("Error fetching product types: " . $e->getMessage());
+}
+
+// Fetch supplier company names from the database
+try {
+    $suppliers_stmt = $conn->prepare("SELECT DISTINCT CompanyName FROM supplier ORDER BY CompanyName ASC");
+    $suppliers_stmt->execute();
+    $suppliers = $suppliers_stmt->fetchAll(PDO::FETCH_COLUMN);
+} catch (PDOException $e) {
+    $suppliers = [];
+    error_log("Error fetching suppliers: " . $e->getMessage());
+}
 
 // Handle AJAX requests for product details
 if (isset($_GET['product_id'])) {
@@ -34,7 +54,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $product_id = $_POST['product_id'];
         $product_name = $_POST['product_name'];
         $product_type = $_POST['product_type'];
-        $supplier_name = $_POST['supplier_name']; // This will still be CompanyName
+        $supplier_name = $_POST['supplier_name'];
         $price = floatval($_POST['price']);
         $stock = intval($_POST['stock']);
         $status = $_POST['status'];
@@ -49,33 +69,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $stmt->execute([$status, $product_id]);
         echo 'success';
         exit;
-    } elseif (isset($_POST['new_product_type'])) { // Handle new product type submission
-        $new_product_type = trim($_POST['new_product_type']); // Trim whitespace
-        
-        // Validate input
+    } elseif (isset($_POST['new_product_type'])) {
+        $new_product_type = trim($_POST['new_product_type']);
         if (empty($new_product_type)) {
             echo json_encode(['error' => 'Product type cannot be empty']);
             exit;
         }
-
         try {
-            // Check if the product type already exists
             $stmt = $conn->prepare("SELECT COUNT(*) FROM ProductType WHERE product_type = ?");
             $stmt->execute([$new_product_type]);
             $count = $stmt->fetchColumn();
-
             if ($count > 0) {
                 echo json_encode(['error' => 'Product type already exists']);
                 exit;
             }
-
-            // Insert the new product type into the ProductType table
             $stmt = $conn->prepare("INSERT INTO ProductType (product_type) VALUES (?)");
             $stmt->execute([$new_product_type]);
-
-            // Log the action (optional)
             logAction($conn, $userId, "Added Product Type", "User added new product type: $new_product_type");
-
             echo json_encode(['success' => 'Product type added successfully']);
             exit;
         } catch (PDOException $e) {
@@ -96,17 +106,14 @@ function fetchProducts($conn, $searchTerm = '', $orderBy = '', $filterBy = '', $
         $orderClause = " ORDER BY p.id ASC";
         $params = array();
 
-        // Search functionality
         if (!empty($searchTerm)) {
             $whereClause .= " AND (p.product_name LIKE :search 
                               OR p.product_type LIKE :search 
                               OR s.CompanyName LIKE :search 
-                              OR p.id LIKE :search 
-                              OR p.color LIKE :search)";
+                              OR p.id LIKE :search)";
             $params[':search'] = "%$searchTerm%";
         }
 
-        // Filter logic
         switch ($filterBy) {
             case 'product-type':
                 if (!empty($subFilter)) {
@@ -117,12 +124,6 @@ function fetchProducts($conn, $searchTerm = '', $orderBy = '', $filterBy = '', $
             case 'product-supplier':
                 if (!empty($subFilter)) {
                     $whereClause .= " AND p.supplier_name = :subFilter";
-                    $params[':subFilter'] = $subFilter;
-                }
-                break;
-            case 'color':
-                if (!empty($subFilter)) {
-                    $whereClause .= " AND p.color = :subFilter";
                     $params[':subFilter'] = $subFilter;
                 }
                 break;
@@ -152,7 +153,6 @@ function fetchProducts($conn, $searchTerm = '', $orderBy = '', $filterBy = '', $
                 break;
         }
 
-        // Order logic
         switch ($orderBy) {
             case 'name-asc':
                 $orderClause = " ORDER BY p.product_name ASC";
@@ -195,7 +195,6 @@ function fetchProducts($conn, $searchTerm = '', $orderBy = '', $filterBy = '', $
     }
 }
 
-// Handle AJAX search request
 if (isset($_POST['action']) && $_POST['action'] === 'search') {
     $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
     $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
@@ -207,7 +206,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'search') {
     exit;
 }
 
-// Initial page load
 $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
 $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
 $filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : '';
@@ -231,95 +229,23 @@ if (isset($products['error'])) {
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
     <style>
-        .left-sidebar {
-            position: fixed;
-            top: 0;
-            left: -250px;
-            width: 250px;
-            height: 100%;
-            background-color: #343F79;
-            transition: left 0.3s ease;
-            z-index: 1000;
-        }
-        .left-sidebar.active {
-            left: 0;
-        }
-        .main-content {
-            margin-left: 0;
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-        }
-        .menu-btn {
-            font-size: 24px;
-            background: none;
-            border: none;
-            cursor: pointer;
-            margin-right: 10px;
-            color: #000;
-        }
-        .header-container {
-            display: flex;
-            align-items: center;
-            justify-content: flex-start;
-            width: 100%;
-            padding: 10px;
-        }
-        .controls-container {
-            display: flex;
-            align-items: center;
-            justify-content: flex-start;
-            margin-bottom: 15px;
-            width: 100%;
-        }
-        .search-container {
-            position: relative;
-            width: 300px;
-            margin-right: 550px;
-            margin-left: 40px;
-        }
-        .search-container .form-control {
-            padding-left: 35px;
-        }
-        .search-container .fa-search {
-            position: absolute;
-            left: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #6c757d;
-        }
-        .btn-dark.mr-2 {
-            margin-right: 15px;
-        }
-        .btn-outline-secondary.mr-2 {
-            margin-right: 15px;
-        }
-        .table-container {
-            width: 100%;
-            overflow-x: auto;
-            margin-left: auto;
-        }
-        .table {
-            width: 100%;
-            table-layout: auto;
-        }
-        .table th, .table td {
-            white-space: nowrap;
-            padding: 8px;
-        }
-        .low-stock {
-            color: red;
-            font-weight: bold;
-        }
-        #subFilterContainer {
-            margin-left: 10px;
-            display: none;
-        }
-        #subFilterSelect {
-            appearance: auto;
-            padding: 5px;
-            min-width: 150px;
-        }
+        .left-sidebar { position: fixed; top: 0; left: -250px; width: 250px; height: 100%; background-color: #343F79; transition: left 0.3s ease; z-index: 1000; }
+        .left-sidebar.active { left: 0; }
+        .main-content { margin-left: 0; display: flex; flex-direction: column; width: 100%; }
+        .menu-btn { font-size: 24px; background: none; border: none; cursor: pointer; margin-right: 10px; color: #000; }
+        .header-container { display: flex; align-items: center; justify-content: flex-start; width: 100%; padding: 10px; }
+        .controls-container { display: flex; align-items: center; justify-content: flex-start; margin-bottom: 15px; width: 100%; }
+        .search-container { position: relative; width: 300px; margin-right: 550px; margin-left: 40px; }
+        .search-container .form-control { padding-left: 35px; }
+        .search-container .fa-search { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #6c757d; }
+        .btn-dark.mr-2 { margin-right: 15px; }
+        .btn-outline-secondary.mr-2 { margin-right: 15px; }
+        .table-container { width: 100%; overflow-x: auto; margin-left: auto; }
+        .table { width: 100%; table-layout: auto; }
+        .table th, .table td { white-space: nowrap; padding: 8px; }
+        .low-stock { color: red; font-weight: bold; }
+        #subFilterContainer { margin-left: 10px; display: none; }
+        #subFilterSelect { appearance: auto; padding: 5px; min-width: 150px; }
     </style>
 </head>
 <body>
@@ -342,6 +268,7 @@ if (isset($products['error'])) {
                 <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
                 <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
                 <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                <li><a href="Returns.php" style="color: white; text-decoration: none;">Returns</a></li>
             </ul>
         </li>
         <li class="dropdown">
@@ -351,16 +278,14 @@ if (isset($products['error'])) {
                 <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
             </ul>
         </li>
-        <li>
-            <a href="Reports.php" style="text-decoration: none; color: inherit;">
-                <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
-            </a>
-        </li>
-        <li>
-            <a href="logout.php" style="text-decoration: none; color: inherit;">
-                <i class="fas fa-sign-out-alt"></i><span> Log out</span>
-            </a>
-        </li>
+        <li class="dropdown">
+    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span><i class="fa fa-chevron-down toggle-btn"></i>
+    <ul class="submenu">
+        <li><a href="Reports.php" style="color: white; text-decoration: none;">Sales</a></li>
+        <li><a href="InventoryReports.php" style="color: white; text-decoration: none;">Inventory</a></li>
+    </ul>
+</li>
+        <li><a href="logout.php" style="text-decoration: none; color: inherit;"><i class="fas fa-sign-out-alt"></i><span> Log out</span></a></li>
     </ul>
 </div>
 
@@ -393,7 +318,6 @@ if (isset($products['error'])) {
                 <option value="">Filter By</option>
                 <option value="product-type" <?php if ($filterBy == 'product-type') echo 'selected'; ?>>Product Type</option>
                 <option value="product-supplier" <?php if ($filterBy == 'product-supplier') echo 'selected'; ?>>Product Supplier</option>
-                <option value="color" <?php if ($filterBy == 'color') echo 'selected'; ?>>Color</option>
                 <option value="price-range" <?php if ($filterBy == 'price-range') echo 'selected'; ?>>Price Range</option>
             </select>
             <div id="subFilterContainer" style="display: <?php echo !empty($filterBy) ? 'inline-block' : 'none'; ?>;">
@@ -411,7 +335,7 @@ if (isset($products['error'])) {
                     <th>Prod ID</th>
                     <th>Product</th>
                     <th>Type Name</th>
-                    <th>Company Name</th> <!-- Changed from Supplier Name -->
+                    <th>Company Name</th>
                     <th>Price</th>
                     <th>Stock</th>
                     <th>Status</th>
@@ -428,7 +352,7 @@ if (isset($products['error'])) {
                             <td><?= htmlspecialchars($product['id']) ?></td>
                             <td><?= htmlspecialchars($product['product_name']) ?></td>
                             <td><?= htmlspecialchars($product['product_type']) ?></td>
-                            <td><?= htmlspecialchars($product['supplier_company_name'] ?? $product['supplier_name']) ?></td> <!-- Display CompanyName -->
+                            <td><?= htmlspecialchars($product['supplier_company_name'] ?? $product['supplier_name']) ?></td>
                             <td>₱<?= number_format($product['price'], 2) ?></td>
                             <td>
                                 <?= htmlspecialchars($product['stock']) ?>
@@ -479,7 +403,7 @@ if (isset($products['error'])) {
                             <input type="text" class="form-control" id="editProductType" name="product_type" required>
                         </div>
                         <div class="form-group">
-                            <label for="editSupplierName">Company Name</label> <!-- Changed label -->
+                            <label for="editSupplierName">Company Name</label>
                             <input type="text" class="form-control" id="editSupplierName" name="supplier_name" required>
                         </div>
                         <div class="form-group">
@@ -536,7 +460,6 @@ if (isset($products['error'])) {
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Sidebar toggle functionality
     const menuToggleBtn = document.getElementById('menuToggleBtn');
     const sidebar = document.querySelector('.left-sidebar');
 
@@ -545,7 +468,6 @@ document.addEventListener('DOMContentLoaded', function() {
             sidebar.classList.toggle('active');
             event.stopPropagation();
         });
-
         document.addEventListener('click', function(event) {
             if (sidebar.classList.contains('active') && 
                 !sidebar.contains(event.target) && 
@@ -553,13 +475,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 sidebar.classList.remove('active');
             }
         });
-
         sidebar.addEventListener('click', function(event) {
             event.stopPropagation();
         });
     }
 
-    // Dropdown toggle
     var dropdowns = document.querySelectorAll('.dropdown');
     dropdowns.forEach(function(dropdown) {
         var toggleBtn = dropdown.querySelector('.toggle-btn');
@@ -568,12 +488,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Redirect to NewInventoryProduct.php on New button click
     document.getElementById('newProductBtn').addEventListener('click', function() {
         window.location.href = 'NewInventory.php';
     });
 
-    // Edit Product Modal
     $('#editProductModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
         var productId = button.data('product-id');
@@ -585,7 +503,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 $('#editProductId').val(data.id);
                 $('#editProductName').val(data.product_name);
                 $('#editProductType').val(data.product_type);
-                $('#editSupplierName').val(data.supplier_company_name || data.supplier_name); // Use CompanyName
+                $('#editSupplierName').val(data.supplier_company_name || data.supplier_name);
                 $('#editPrice').val(data.price);
                 $('#editStock').val(data.stock);
                 $('#editStatus').val(data.status);
@@ -616,7 +534,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Add Product Type Modal
     document.getElementById('saveProductTypeButton').addEventListener('click', function() {
         var form = document.getElementById('addProductTypeForm');
         var data = new FormData(form);
@@ -624,14 +541,14 @@ document.addEventListener('DOMContentLoaded', function() {
             method: 'POST',
             body: data
         })
-        .then(response => response.json()) // Parse JSON response
+        .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert(data.success); // Show success message
+                alert(data.success);
                 $('#addProductTypeModal').modal('hide');
-                // Optionally, refresh the table or update the product type dropdown here
+                updateTable();
             } else {
-                alert(data.error || 'Error adding product type'); // Show error message
+                alert(data.error || 'Error adding product type');
             }
         })
         .catch(error => {
@@ -640,36 +557,24 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Search and table update functionality
     const searchInput = document.getElementById('searchInput');
     const filterBySelect = document.getElementById('filterBySelect');
     const subFilterContainer = document.getElementById('subFilterContainer');
     const subFilterSelect = document.getElementById('subFilterSelect');
     let searchTimeout;
 
-    // Define sub-filter options (example values, adjust as needed)
+    // Pass product types and suppliers from PHP to JavaScript
+    const productTypes = <?php echo json_encode($product_types); ?>;
+    const suppliers = <?php echo json_encode($suppliers); ?>;
+
     const subFilters = {
         'product-type': [
             { value: '', text: 'Select Product Type' },
-            { value: 'electronics', text: 'Electronics' },
-            { value: 'clothing', text: 'Clothing' },
-            { value: 'furniture', text: 'Furniture' },
-            { value: 'food', text: 'Food' }
+            ...productTypes.map(type => ({ value: type, text: type }))
         ],
         'product-supplier': [
             { value: '', text: 'Select Supplier' },
-            { value: 'Supplier A', text: 'Supplier A' }, // Update these to match CompanyName values
-            { value: 'Supplier B', text: 'Supplier B' },
-            { value: 'Supplier C', text: 'Supplier C' },
-            { value: 'Supplier D', text: 'Supplier D' }
-        ],
-        'color': [
-            { value: '', text: 'Select Color' },
-            { value: 'red', text: 'Red' },
-            { value: 'blue', text: 'Blue' },
-            { value: 'green', text: 'Green' },
-            { value: 'black', text: 'Black' },
-            { value: 'white', text: 'White' }
+            ...suppliers.map(supplier => ({ value: supplier, text: supplier }))
         ],
         'price-range': [
             { value: '', text: 'Select Range' },
@@ -684,7 +589,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const filterValue = filterBySelect.value;
         subFilterContainer.style.display = filterValue ? 'inline-block' : 'none';
         
-        // Clear and populate sub-filter dropdown
         subFilterSelect.innerHTML = '';
         if (filterValue) {
             const options = subFilters[filterValue];
@@ -696,7 +600,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 subFilterSelect.appendChild(option);
             });
         }
-        updateTable(); // Trigger table update
+        updateTable();
     }
 
     function updateTable() {
@@ -735,7 +639,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td>${product.id}</td>
                                 <td>${product.product_name}</td>
                                 <td>${product.product_type || ''}</td>
-                                <td>${product.supplier_company_name || product.supplier_name || ''}</td> <!-- Display CompanyName -->
+                                <td>${product.supplier_company_name || product.supplier_name || ''}</td>
                                 <td>₱${Number(product.price).toFixed(2)}</td>
                                 <td>
                                     ${product.stock}
@@ -768,7 +672,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Event listeners
     searchInput.addEventListener('input', function() {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(updateTable, 300);
@@ -778,8 +681,7 @@ document.addEventListener('DOMContentLoaded', function() {
     subFilterSelect.addEventListener('change', updateTable);
     document.querySelector('select[name="orderBy"]').addEventListener('change', updateTable);
 
-    // Initial load
-    handleFilterChange(); // Set initial sub-filter state
+    handleFilterChange();
     updateTable();
 });
 </script>

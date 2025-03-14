@@ -5,11 +5,11 @@ session_start();
 
 $userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
 // Only log if last log was more than X seconds ago
-if (!isset($_SESSION['last_Reports_log']) || (time() - $_SESSION['last_Reports_log']) > 300) { // 300 seconds = 5 minutes
-    logAction($conn, $userId, "Accessed Reports Page", "User accessed the Reports page");
-    $_SESSION['last_Reports_log'] = time();
+if (!isset($_SESSION['last_Inventory_Reports_log']) || (time() - $_SESSION['last_Inventory_Reports_log']) > 300) { // 300 seconds = 5 minutes
+    logAction($conn, $userId, "Accessed Inventory Reports Page", "User accessed the Inventory Reports page");
+    $_SESSION['last_Inventory_Reports_log'] = time();
 }
-// Handle sales report fetch
+// Handle inventory report fetch
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['CONTENT_TYPE']) && $_SERVER['CONTENT_TYPE'] === 'application/json') {
     try {
         $input = json_decode(file_get_contents('php://input'), true);
@@ -24,15 +24,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['CONTENT_TYPE']) && 
             throw new Exception('Invalid date range');
         }
 
+        // SQL query to fetch inventory data including Amount from DeliveryItems
         $sql = "
             SELECT 
-                ii.product AS Product,
-                SUM(ii.quantity) AS Quantity,
-                SUM(ii.amount) AS Amount
-            FROM Invoice i
-            JOIN InvoiceItems ii ON i.invoice_id = ii.invoice_id
-            WHERE i.date BETWEEN :startDate AND :endDate
-            GROUP BY ii.product
+                di.ProductName AS Product,
+                di.Quantity AS Quantity,
+                di.Rate AS CostPerUnit,
+                di.Amount AS TotalCost
+            FROM deliveries d
+            INNER JOIN DeliveryItems di ON d.DeliveryID = di.DeliveryID
+            WHERE d.DeliveryDate BETWEEN :startDate AND :endDate
+            AND d.Status = 'Delivered'
         ";
         
         $stmt = $conn->prepare($sql);
@@ -60,7 +62,7 @@ ob_end_flush();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory Dashboard - Sales Reports</title>
+    <title>Inventory Dashboard - Inventory Reports</title>
     <link href="../statics/bootstrap css/bootstrap.min.css" rel="stylesheet">
     <link href="../statics/Reports.css" rel="stylesheet">
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
@@ -126,9 +128,8 @@ ob_end_flush();
     </ul>
 </div>
 
-
 <div class="main-content">
-    <h1>Sales Reports</h1>
+    <h1>Inventory Reports</h1>
 
     <div class="date-inputs">
         <div class="form-group">
@@ -146,14 +147,13 @@ ob_end_flush();
             <tr>
                 <th>Product</th>
                 <th>Quantity</th>
-                <th>Revenue</th>
                 <th>Cost of Goods</th>
                 <th>Profit</th>
             </tr>
         </thead>
         <tbody id="reportTableBody">
             <tr>
-                <td colspan="5" class="text-center text-muted">Sales report will load automatically. Adjust date range if needed.</td>
+                <td colspan="4" class="text-center text-muted">Inventory report will load automatically. Adjust date range if needed.</td>
             </tr>
         </tbody>
     </table>
@@ -174,8 +174,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const tbody = document.getElementById('reportTableBody');
     let searchTimeout;
 
-    // Function to fetch sales report
-    function fetchSalesReport() {
+    // Function to fetch inventory report
+    function fetchInventoryReport() {
         let start = dateRangeStartInput.value;
         let end = dateRangeEndInput.value;
 
@@ -193,7 +193,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const endDb = parseDate(end);
 
         if (!startDb || !endDb) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Invalid date range provided.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Invalid date range provided.</td></tr>';
             return;
         }
 
@@ -212,40 +212,37 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(data => {
             if (!data.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No sales data available for this range.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No inventory data available for this range.</td></tr>';
                 return;
             }
 
             if (data.error) {
-                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Server error: ${data.error}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">Server error: ${data.error}</td></tr>`;
                 return;
             }
 
             const productData = {};
             data.forEach(item => {
                 if (!productData[item.Product]) {
-                    productData[item.Product] = { qty: 0, revenue: 0, cost: 0 };
+                    productData[item.Product] = { qty: 0, cost: 0 };
                 }
                 productData[item.Product].qty += parseInt(item.Quantity);
-                productData[item.Product].revenue += parseFloat(item.Amount);
-                productData[item.Product].cost += getCostOfGoods(item.Product, item.Quantity);
+                productData[item.Product].cost += parseFloat(item.TotalCost); // Cost of Goods from TotalCost
             });
 
             tbody.innerHTML = '';
-            let totalQty = 0, totalRevenue = 0, totalCost = 0;
+            let totalQty = 0, totalCost = 0;
             for (const [product, info] of Object.entries(productData)) {
-                const profit = info.revenue - info.cost;
+                const profit = -info.cost; // Profit is negative cost since no revenue
                 tbody.innerHTML += `
                     <tr>
                         <td>${product}</td>
                         <td>${info.qty}</td>
-                        <td>₱${info.revenue.toFixed(2)}</td>
                         <td>₱${info.cost.toFixed(2)}</td>
                         <td>₱${profit.toFixed(2)}</td>
                     </tr>
                 `;
                 totalQty += info.qty;
-                totalRevenue += info.revenue;
                 totalCost += info.cost;
             }
 
@@ -253,31 +250,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 <tr>
                     <td><strong>Total</strong></td>
                     <td><strong>${totalQty}</strong></td>
-                    <td><strong>₱${totalRevenue.toFixed(2)}</strong></td>
                     <td><strong>₱${totalCost.toFixed(2)}</strong></td>
-                    <td><strong>₱${(totalRevenue - totalCost).toFixed(2)}</strong></td>
+                    <td><strong>₱${(-totalCost).toFixed(2)}</strong></td>
                 </tr>
             `;
         })
         .catch(error => {
             console.error('Fetch Error:', error.message);
-            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Error loading sales data: ${error.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">Error loading inventory data: ${error.message}</td></tr>`;
         });
     }
 
     // Debounced fetch on date input change
     dateRangeStartInput.addEventListener('input', function() {
         clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(fetchSalesReport, 500); // 500ms debounce
+        searchTimeout = setTimeout(fetchInventoryReport, 500); // 500ms debounce
     });
 
     dateRangeEndInput.addEventListener('input', function() {
         clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(fetchSalesReport, 500); // 500ms debounce
+        searchTimeout = setTimeout(fetchInventoryReport, 500); // 500ms debounce
     });
 
     // Initial fetch on page load
-    fetchSalesReport();
+    fetchInventoryReport();
 
     function formatDate(date) {
         const day = String(date.getDate()).padStart(2, '0');
@@ -295,11 +291,6 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Date Parse Error:', e.message, dateStr);
             return null;
         }
-    }
-
-    function getCostOfGoods(product, quantity) {
-        const costPerUnit = 50.00; // Replace with real logic if needed (e.g., fetch from a products table)
-        return quantity * costPerUnit;
     }
 });
 </script>

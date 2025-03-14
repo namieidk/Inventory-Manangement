@@ -22,8 +22,7 @@ if (isset($_GET['order_id']) && !isset($_GET['delivery_id'])) {
     exit;
 }
 
-// Define $filterBy and $orderBy globally with default empty values
-$filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : (isset($_GET['filterBy']) ? $_GET['filterBy'] : '');
+// Define $orderBy globally with default empty value
 $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : (isset($_GET['orderBy']) ? $_GET['orderBy'] : '');
 
 // Handle AJAX request for delivery details
@@ -55,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['get_details']) && isset
 }
 
 // Fetch deliveries function (SELECT only)
-function fetchDeliveries($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
+function fetchDeliveries($conn, $searchTerm = '', $orderBy = '') {
     try {
         $sql = "SELECT 
             d.DeliveryID,
@@ -81,24 +80,6 @@ function fetchDeliveries($conn, $searchTerm = '', $orderBy = '', $filterBy = '')
                               OR d.SupplierName LIKE :search 
                               OR d.Status LIKE :search)";
             $params[':search'] = "%$searchTerm%";
-        }
-
-        // Filter logic
-        switch ($filterBy) {
-            case 'price-below-1000':
-                $whereClause .= " AND d.Total < 1000";
-                break;
-            case 'price-1000-5000':
-                $whereClause .= " AND d.Total BETWEEN 1000 AND 5000";
-                break;
-            case 'price-5000-10000':
-                $whereClause .= " AND d.Total BETWEEN 5000 AND 10000";
-                break;
-            case 'price-above-10000':
-                $whereClause .= " AND d.Total > 10000";
-                break;
-            default:
-                break;
         }
 
         // Order logic
@@ -144,9 +125,8 @@ function fetchDeliveries($conn, $searchTerm = '', $orderBy = '', $filterBy = '')
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'search') {
     $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
     $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
-    $filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : '';
-    $deliveries = fetchDeliveries($conn, $searchTerm, $orderBy, $filterBy);
-    error_log("Search: $searchTerm, OrderBy: $orderBy, FilterBy: $filterBy");
+    $deliveries = fetchDeliveries($conn, $searchTerm, $orderBy);
+    error_log("Search: $searchTerm, OrderBy: $orderBy");
     header('Content-Type: application/json');
     echo json_encode($deliveries);
     exit;
@@ -193,13 +173,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             </ul>
         </li>
         <li class="dropdown">
-                <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                    <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
-                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
-                </ul>
-            </li>
+            <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
+                <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                <li><a href="Returns.php" style="color: white; text-decoration: none;">Returns</a></li>
+            </ul>
+        </li>
         <li class="dropdown">
             <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
             <ul class="submenu">
@@ -207,8 +188,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
             </ul>
         </li>
-        <li><a href="Reports.php" style="text-decoration: none; color: inherit;"><i class="fas fa-file-invoice-dollar"></i><span> Reports</span></a></li>
-        <li><a href="logout.php" style="text-decoration: none; color: inherit;"><i class="fas fa-sign-out-alt"></i><span> Log out</span></a></li>
+        <li class="dropdown">
+    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span><i class="fa fa-chevron-down toggle-btn"></i>
+    <ul class="submenu">
+        <li><a href="Reports.php" style="color: white; text-decoration: none;">Sales</a></li>
+        <li><a href="InventoryReports.php" style="color: white; text-decoration: none;">Inventory</a></li>
+    </ul>
+</li>
+        <li>
+            <a href="logout.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-sign-out-alt"></i><span> Log out</span>
+            </a>
+        </li>
     </ul>
 </div>
 
@@ -231,13 +222,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <option value="price-desc" <?php if ($orderBy === 'price-desc') echo 'selected'; ?>>Price (High to Low)</option>
             <option value="newest" <?php if ($orderBy === 'newest') echo 'selected'; ?>>Newest</option>
             <option value="oldest" <?php if ($orderBy === 'oldest') echo 'selected'; ?>>Oldest</option>
-        </select>
-        <select class="btn btn-outline-secondary" id="filterBySelect" name="filterBy">
-            <option value="">Filter By</option>
-            <option value="price-below-1000" <?php if ($filterBy === 'price-below-1000') echo 'selected'; ?>>Below ₱1,000</option>
-            <option value="price-1000-5000" <?php if ($filterBy === 'price-1000-5000') echo 'selected'; ?>>₱1,000 - ₱5,000</option>
-            <option value="price-5000-10000" <?php if ($filterBy === 'price-5000-10000') echo 'selected'; ?>>₱5,000 - ₱10,000</option>
-            <option value="price-above-10000" <?php if ($filterBy === 'price-above-10000') echo 'selected'; ?>>Above ₱10,000</option>
         </select>
     </div>
 
@@ -319,9 +303,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateTable() {
         const searchTerm = document.getElementById('searchInput').value.trim();
         const orderBy = document.getElementById('orderBySelect').value;
-        const filterBy = document.getElementById('filterBySelect').value;
 
-        console.log('Updating table with:', { searchTerm, orderBy, filterBy });
+        console.log('Updating table with:', { searchTerm, orderBy });
 
         $.ajax({
             url: 'Deliverytable.php',
@@ -330,8 +313,7 @@ document.addEventListener('DOMContentLoaded', function() {
             data: {
                 action: 'search',
                 search: searchTerm,
-                orderBy: orderBy,
-                filterBy: filterBy
+                orderBy: orderBy
             },
             success: function(deliveries) {
                 console.log('Deliveries received:', deliveries);
@@ -370,18 +352,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Connect select boxes to table updates
+    // Connect select box and search input to table updates
     const orderBySelect = document.getElementById('orderBySelect');
-    const filterBySelect = document.getElementById('filterBySelect');
     const searchInput = document.getElementById('searchInput');
 
     orderBySelect.addEventListener('change', function() {
         console.log('Order By changed to:', this.value);
-        updateTable();
-    });
-
-    filterBySelect.addEventListener('change', function() {
-        console.log('Filter By changed to:', this.value);
         updateTable();
     });
 

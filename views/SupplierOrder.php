@@ -4,18 +4,14 @@ include '../database/utils.php';
 session_start();
 
 $userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
-// Only log if last log was more than X seconds ago
-if (!isset($_SESSION['last_SupplierOrder_log']) || (time() - $_SESSION['last_SupplierOrder_log']) > 300) { // 300 seconds = 5 minutes
+// Only log if last log was more than 5 minutes ago
+if (!isset($_SESSION['last_SupplierOrder_log']) || (time() - $_SESSION['last_SupplierOrder_log']) > 300) {
     logAction($conn, $userId, "Accessed Supplier Order Page", "User accessed the Supplier Order page");
     $_SESSION['last_SupplierOrder_log'] = time();
 }
 // Enable error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
-
-// Define $filterBy and $orderBy globally with default empty values
-$filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : (isset($_GET['filterBy']) ? $_GET['filterBy'] : '');
-$orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : (isset($_GET['orderBy']) ? $_GET['orderBy'] : '');
 
 // Handle AJAX request for order details
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['get_details']) && isset($_GET['order_id'])) {
@@ -46,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['get_details']) && isset
 }
 
 // Unified fetch function for both initial load and AJAX
-function fetchOrders($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
+function fetchOrders($conn, $searchTerm = '', $orderBy = '', $filterBy = '', $subFilter = '') {
     try {
         $sql = "SELECT 
             so.OrderID,
@@ -73,19 +69,11 @@ function fetchOrders($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
 
         // Filter logic
         switch ($filterBy) {
-            case 'price-below-1000':
-                $whereClause .= " AND so.Total < 1000";
-                break;
-            case 'price-1000-5000':
-                $whereClause .= " AND so.Total BETWEEN 1000 AND 5000";
-                break;
-            case 'price-5000-10000':
-                $whereClause .= " AND so.Total BETWEEN 5000 AND 10000";
-                break;
-            case 'price-above-10000':
-                $whereClause .= " AND so.Total > 10000";
-                break;
-            default:
+            case 'status':
+                if (!empty($subFilter)) {
+                    $whereClause .= " AND so.Status = :subFilter";
+                    $params[':subFilter'] = $subFilter;
+                }
                 break;
         }
 
@@ -109,8 +97,6 @@ function fetchOrders($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
             case 'oldest':
                 $orderClause = " ORDER BY so.OrderDate ASC";
                 break;
-            default:
-                break;
         }
 
         $sql .= $whereClause . " " . $orderClause;
@@ -131,11 +117,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
     $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
     $filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : '';
-    $orders = fetchOrders($conn, $searchTerm, $orderBy, $filterBy);
-    error_log("Search: $searchTerm, OrderBy: $orderBy, FilterBy: $filterBy"); // Debug log to server
+    $subFilter = isset($_POST['subFilter']) ? $_POST['subFilter'] : '';
+    $orders = fetchOrders($conn, $searchTerm, $orderBy, $filterBy, $subFilter);
+    error_log("Search: $searchTerm, OrderBy: $orderBy, FilterBy: $filterBy, SubFilter: $subFilter"); // Debug log to server
     header('Content-Type: application/json');
     echo json_encode($orders);
     exit;
+}
+
+$searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
+$orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
+$filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : '';
+$subFilter = isset($_POST['subFilter']) ? $_POST['subFilter'] : '';
+$orders = fetchOrders($conn, $searchTerm, $orderBy, $filterBy, $subFilter);
+if (isset($orders['error'])) {
+    $error = $orders['error'];
+    $orders = [];
 }
 ?>
 
@@ -225,6 +222,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             padding: 5px;
             min-width: 150px;
         }
+        #subFilterContainer {
+            margin-left: 10px;
+            display: none;
+        }
+        #subFilterSelect {
+            appearance: auto;
+            padding: 5px;
+            min-width: 150px;
+        }
     </style>
 </head>
 <body>
@@ -242,13 +248,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             </ul>
         </li>
         <li class="dropdown">
-                <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                    <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
-                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
-                </ul>
-            </li>
+            <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
+                <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                <li><a href="Returns.php" style="color: white; text-decoration: none;">Returns</a></li>
+            </ul>
+        </li>
         <li class="dropdown">
             <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
             <ul class="submenu">
@@ -256,11 +263,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
             </ul>
         </li>
-        <li>
-            <a href="Reports.php" style="text-decoration: none; color: inherit;">
-                <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
-            </a>
-        </li>
+        <li class="dropdown">
+    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span><i class="fa fa-chevron-down toggle-btn"></i>
+    <ul class="submenu">
+        <li><a href="Reports.php" style="color: white; text-decoration: none;">Sales</a></li>
+        <li><a href="InventoryReports.php" style="color: white; text-decoration: none;">Inventory</a></li>
+    </ul>
+</li>
         <li>
             <a href="logout.php" style="text-decoration: none; color: inherit;">
                 <i class="fas fa-sign-out-alt"></i><span> Log out</span>
@@ -278,7 +287,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     <div class="controls-container">
         <div class="search-container">
             <i class="fa fa-search"></i>
-            <input type="text" class="form-control" id="searchInput" placeholder="Search by Order ID, Supplier, etc.">
+            <input type="text" class="form-control" id="searchInput" placeholder="Search by Order ID, Supplier, etc." value="<?php echo htmlspecialchars($searchTerm); ?>">
         </div>
         <button class="btn btn-dark mr-2" id="newProductBtn">New <i class="fa fa-plus"></i></button>
         <form name="filterForm" id="filterForm" method="post" class="d-flex align-items-center">
@@ -291,13 +300,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 <option value="newest" <?php if ($orderBy === 'newest') echo 'selected'; ?>>Newest</option>
                 <option value="oldest" <?php if ($orderBy === 'oldest') echo 'selected'; ?>>Oldest</option>
             </select>
-            <select class="btn btn-outline-secondary" name="filterBy" onchange="updateTable()">
-                <option value="">Filtered By</option>
-                <option value="price-below-1000" <?php if ($filterBy === 'price-below-1000') echo 'selected'; ?>>Below ₱1,000</option>
-                <option value="price-1000-5000" <?php if ($filterBy === 'price-1000-5000') echo 'selected'; ?>>₱1,000 - ₱5,000</option>
-                <option value="price-5000-10000" <?php if ($filterBy === 'price-5000-10000') echo 'selected'; ?>>₱5,000 - ₱10,000</option>
-                <option value="price-above-10000" <?php if ($filterBy === 'price-above-10000') echo 'selected'; ?>>Above ₱10,000</option>
+            <select class="btn btn-outline-secondary mr-2" name="filterBy" id="filterBySelect" onchange="handleFilterChange()">
+                <option value="">Filter By</option>
+                <option value="status" <?php if ($filterBy === 'status') echo 'selected'; ?>>Status</option>
             </select>
+            <div id="subFilterContainer" style="display: <?php echo !empty($filterBy) ? 'inline-block' : 'none'; ?>;">
+                <select id="subFilterSelect" class="btn btn-outline-secondary" onchange="updateTable()">
+                    <!-- Options populated by JavaScript -->
+                </select>
+            </div>
         </form>
     </div>
 
@@ -313,7 +324,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             </tr>
         </thead>
         <tbody id="orderTableBody">
-            <!-- Populated via AJAX -->
+            <?php if (isset($error)): ?>
+                <tr><td colspan="6" class="text-center text-danger"><?= htmlspecialchars($error) ?></td></tr>
+            <?php elseif (!empty($orders)): ?>
+                <?php foreach ($orders as $order): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($order['OrderID'] ?? 'N/A') ?></td>
+                        <td><?= htmlspecialchars($order['ContactPerson'] ?? '') ?></td>
+                        <td>₱<?= number_format($order['Total'] ?? 0, 2) ?></td>
+                        <td><?= htmlspecialchars($order['Status'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($order['DeliveryDate'] ?? '') ?></td>
+                        <td>
+                            <button class="btn btn-sm btn-success delivery-btn" 
+                                    data-order-id="<?= htmlspecialchars($order['OrderID']) ?>"
+                                    title="View Delivery">
+                                <i class="fas fa-truck"></i>
+                            </button>
+                            <span class="order-link ms-2" data-order-id="<?= htmlspecialchars($order['OrderID']) ?>">
+                                <i class="fas fa-info-circle" title="View Details"></i>
+                            </span>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <tr><td colspan="6" class="text-center text-muted">No supplier orders available. Input new order.</td></tr>
+            <?php endif; ?>
         </tbody>
     </table>
 
@@ -382,13 +417,47 @@ document.addEventListener('DOMContentLoaded', function() {
         sidebar.addEventListener('click', (event) => event.stopPropagation());
     }
 
+    // Define sub-filters
+    const subFilters = {
+        'status': [
+            { value: '', text: 'Select Status' },
+            { value: 'Pending', text: 'Pending' },
+            { value: 'Completed', text: 'Completed' },
+            { value: 'Cancelled', text: 'Cancelled' },
+            { value: 'On Hold', text: 'On Hold' }
+        ]
+    };
+
+    // Handle filter change
+    function handleFilterChange() {
+        const filterValue = document.getElementById('filterBySelect').value;
+        const subFilterContainer = document.getElementById('subFilterContainer');
+        const subFilterSelect = document.getElementById('subFilterSelect');
+        
+        subFilterContainer.style.display = filterValue ? 'inline-block' : 'none';
+        subFilterSelect.innerHTML = '';
+        
+        if (filterValue) {
+            const options = subFilters[filterValue];
+            options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.value;
+                option.text = opt.text;
+                if (opt.value === '<?php echo $subFilter; ?>') option.selected = true;
+                subFilterSelect.appendChild(option);
+            });
+        }
+        updateTable();
+    }
+
     // Table update function
     function updateTable() {
         const searchTerm = document.getElementById('searchInput').value.trim();
         const orderBy = document.querySelector('select[name="orderBy"]').value;
         const filterBy = document.querySelector('select[name="filterBy"]').value;
+        const subFilter = filterBy ? document.getElementById('subFilterSelect').value : '';
 
-        console.log('Updating table with:', { searchTerm, orderBy, filterBy }); // Debug
+        console.log('Updating table with:', { searchTerm, orderBy, filterBy, subFilter }); // Debug
 
         $.ajax({
             url: 'SupplierOrder.php',
@@ -398,7 +467,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 action: 'search',
                 search: searchTerm,
                 orderBy: orderBy,
-                filterBy: filterBy
+                filterBy: filterBy,
+                subFilter: subFilter
             },
             success: function(orders) {
                 console.log('Orders received:', orders); // Debug
@@ -434,10 +504,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No supplier orders available. Input new order.</td></tr>';
                 }
 
-                // Update the select elements to reflect current values
-                document.querySelector('select[name="orderBy"]').value = orderBy;
-                document.querySelector('select[name="filterBy"]').value = filterBy;
-
                 // Reattach event listeners
                 attachDeliveryButtonListeners();
                 attachOrderLinkListeners();
@@ -449,7 +515,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Event listeners for search and dropdowns
+    // Event listeners
     const searchInput = document.getElementById('searchInput');
     let searchTimeout;
     searchInput.addEventListener('input', function() {
@@ -457,17 +523,12 @@ document.addEventListener('DOMContentLoaded', function() {
         searchTimeout = setTimeout(updateTable, 300); // Debounce 300ms
     });
 
-    document.querySelector('select[name="orderBy"]').addEventListener('change', function() {
-        console.log('Order By selected:', this.value); // Debug
-        updateTable();
-    });
+    document.querySelector('select[name="orderBy"]').addEventListener('change', updateTable);
+    document.getElementById('filterBySelect').addEventListener('change', handleFilterChange);
+    document.getElementById('subFilterSelect').addEventListener('change', updateTable);
 
-    document.querySelector('select[name="filterBy"]').addEventListener('change', function() {
-        console.log('Filter By selected:', this.value); // Debug
-        updateTable();
-    });
-
-    // Initial table load
+    // Initial load
+    handleFilterChange();
     updateTable();
 
     // Delivery button functionality

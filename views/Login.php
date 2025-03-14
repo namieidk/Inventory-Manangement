@@ -1,6 +1,6 @@
 <?php
 include '../database/database.php';
-
+session_start(); // Add this at the top
 
 $error_message = "";
 
@@ -65,25 +65,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             align-items: center;
             justify-content: center;
             width: 100%;
-            max-width: 400px; /* Optional: limits form width */
-            margin: 0 auto; /* Centers the container horizontally */
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
         }
         .input-group {
             margin-top: 10px;
             display: flex;
             align-items: center;
-            width: 100%; /* Ensures inputs stretch to container width */
+            width: 100%;
         }
         .input-group-text {
             height: 25px;
-            width: 35px; /* Fixed width for consistency */
+            width: 35px;
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 0;
             margin: 0;
-            background-color: #f8f9fa; /* Matches Bootstrap default */
-            border: none; /* No border on icon */
+            background-color: #f8f9fa;
+            border: none;
         }
         .input-group-text i {
             font-size: 14px;
@@ -95,11 +96,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             line-height: 25px;
             margin: 0;
             border: 1px solid #ced4da;
-            width: 80%; /* Ensures input fills remaining space */
-            border-radius: 4px; /* Small curved borders on all sides */
+            width: 80%;
+            border-radius: 4px;
+            box-sizing: border-box;
         }
         form {
-            width: 50%; /* Fixed from '50' */
+            width: 50%;
         }
     </style>
 </head>
@@ -124,13 +126,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <div class="input-group">
                     <span class="input-group-text"><i class="fa-solid fa-lock"></i></span>
                     <input type="password" name="password" class="form-control" placeholder="Password" required>
-                </div>
-            </div>
-
-            <div class="mb-3">
-                <div class="input-group">
-                    <span class="input-group-text"><i class="fa-solid fa-user-tag"></i></span>
-                    <input type="text" name="role" class="form-control" placeholder="Role" required>
                 </div>
             </div>
 

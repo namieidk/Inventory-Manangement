@@ -23,7 +23,6 @@ $prefill_customer_name = '';
 $prefill_reference_number = '';
 if ($prefill_invoice_id) {
     try {
-        // Fetch the order_id and client_name from the Invoice table
         $stmt = $conn->prepare("
             SELECT i.tin, i.client_name, i.reference_number
             FROM Invoice i
@@ -33,7 +32,6 @@ if ($prefill_invoice_id) {
         $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($invoice) {
-            // Assuming 'tin' contains 'Order-<order_id>' format, extract order_id
             if (preg_match('/Order-(\d+)/', $invoice['tin'], $matches)) {
                 $prefill_order_id = (int)$matches[1];
             }
@@ -88,15 +86,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         $conn->beginTransaction();
 
         $order_id = $_POST['order_id'] ?? null;
-        $return_reference = $_POST['return_reference'] ?? '';
-        $return_date = $_POST['return_date'] ?? '';
-        $return_reason = $_POST['return_reason'] ?? '';
+        $return_reference = $_POST['return_reference'] ?? null; // Nullable in DB
+        $return_date = $_POST['return_date'] ?? null;
+        $return_reason = $_POST['return_reason'] ?? null; // Nullable in DB
         $return_status = $_POST['return_status'] ?? 'Pending';
         $total_refunded = (float)($_POST['total'] ?? 0.00);
 
-        // Validation
+        // Validation for required fields
         if (empty($order_id) || empty($return_date)) {
-            throw new Exception("Customer Name and Return Date are required.");
+            throw new Exception("Customer Order and Return Date are required.");
         }
 
         // Fetch CustomerName based on OrderID
@@ -122,7 +120,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         ]);
         $return_id = $conn->lastInsertId();
 
-        // Insert items into ReturnItems
+        // Insert items into ReturnItems (assuming table exists)
         if (isset($_POST['items']) && is_array($_POST['items'])) {
             $item_sql = "INSERT INTO ReturnItems (return_id, product, quantity, unit_price, amount) 
                          VALUES (:return_id, :product, :quantity, :unit_price, :amount)";
@@ -192,13 +190,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
 <div class="left-sidebar">
     <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
     <ul class="menu">
-        <div style="position: relative; display: inline-block; margin-left: 170px; margin-top: 10px;">
-            <i class="fa fa-cog" id="settingsIcon" style="font-size: 20px; cursor: pointer;"></i>
-            <div id="logoutMenu" style="display: none; position: absolute; top: 20px; right: 0;">
-                <a href="#" id="lightModeBtn">Light Mode</a>
-                <a href="#" id="darkModeBtn">Dark Mode</a>
-            </div>
-        </div>
         <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
         <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
         <li class="dropdown">
@@ -222,26 +213,34 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
             <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
             <ul class="submenu">
                 <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
                 <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
             </ul>
         </li>
-        <li><a href="Reports.php" style="text-decoration: none; color: inherit;"><i class="fas fa-file-invoice-dollar"></i><span> Reports</span></a></li>
-        <li><a href="logout.php" style="text-decoration: none; color: inherit;"><i class="fas fa-sign-out-alt"></i><span> Log out</span></a></li>
+        <li>
+            <a href="Reports.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
+            </a>
+        </li>
+        <li>
+            <a href="logout.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-sign-out-alt"></i><span> Log out</span>
+            </a>
+        </li>
     </ul>
 </div>
+
 <div class="container">
     <h1>New Return<?php echo $prefill_order_id ? " Order #$prefill_order_id" : ($prefill_invoice_id ? " Invoice #$prefill_invoice_id" : ""); ?></h1>
     <form method="post" id="returnForm">
         <div class="row mb-3">
             <div class="col-md-6">
-                <label class="form-label">Customer Name</label>
+                <label class="form-label">Customer Order</label>
                 <select class="form-control" name="order_id" id="orderIdSelect" style="width: 400px; height: 40px;" required>
-                    <option value="">Select Customer</option>
+                    <option value="">Select Customer Order</option>
                     <?php foreach ($customer_orders as $order): ?>
                         <option value="<?php echo htmlspecialchars($order['OrderID']); ?>"
                             <?php echo $prefill_order_id == $order['OrderID'] ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($order['CustomerName']); ?>
+                            <?php echo htmlspecialchars($order['CustomerName'] . " - Order #" . $order['OrderID'] . " (" . date('Y-m-d', strtotime($order['OrderDate'])) . ")"); ?>
                         </option>
                     <?php endforeach; ?>
                 </select>

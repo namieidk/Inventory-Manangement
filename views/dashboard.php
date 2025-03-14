@@ -2,14 +2,14 @@
 include '../database/database.php';
 session_start();
 
+// Set timezone at the top
+date_default_timezone_set('Asia/Manila');
+
+// Check if user is logged in
 if (!isset($_SESSION['username'])) {
     header('Location: Login.php');
-    date_default_timezone_set('Asia/Manila'); 
     exit;
 }
-
-// Set timezone
-date_default_timezone_set('Asia/Manila');
 
 // Get start and end of the current week (Monday to Sunday)
 $start_of_week = date('Y-m-d', strtotime('monday this week'));
@@ -174,79 +174,67 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
     <style>
         .graph-container {
             width: 100%;
-            height: 400px; /* Increased height to ensure labels fit */
-            margin: 20px 0 50px 0; /* Added bottom margin to push content down */
+            height: 400px;
+            margin: 20px 0 50px 0;
         }
         #toggleGraphBtn {
             margin: 10px 0;
         }
         .recent-orders, .inventory-summary {
-            margin-top: 40px; /* Increased margin to move sections further down */
+            margin-top: 40px;
         }
     </style>
 </head>
-<body>
-    <div class="left-sidebar">
-        <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
-        <ul class="menu">
-            <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
-            <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
-                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
-                </ul>
-            </li>
-            <li class="dropdown">
-                <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                    <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
-                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+<div class="left-sidebar">
+    <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
+    <ul class="menu">
+        <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
+        <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
+                <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
+                <li><a href="Deliverytable.php">Delivery</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+            <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
+                <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                <li><a href="Returns.php" style="color: white; text-decoration: none;">Returns</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+            <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
+                <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
+            </ul>
+        </li>
+        <li class="dropdown">
+    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span><i class="fa fa-chevron-down toggle-btn"></i>
+    <ul class="submenu">
+        <li><a href="Reports.php" style="color: white; text-decoration: none;">Sales</a></li>
+        <li><a href="InventoryReports.php" style="color: white; text-decoration: none;">Inventory</a></li>
+    </ul>
+</li>
+        <li>
+            <a href="logout.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-sign-out-alt"></i><span> Log out</span>
+            </a>
+        </li>
+    </ul>
+</div>
 
-                </ul>
-            </li>
-            <li class="dropdown">
-                <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
-                <ul class="submenu">
-                    <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                    <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
-                    <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
-                </ul>
-            </li>
-            <li>
-                <a href="Reports.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
-                </a>
-            </li>
-            <li>
-                <a href="logout.php" style="text-decoration: none; color: inherit;">
-                    <i class="fas fa-sign-out-alt"></i><span> Log out</span>
-                </a>
-            </li>
-        </ul>
-    </div>
 
     <div class="main-content">
         <header>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h1>Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?></h1>
-                    <p><?php echo date('d F Y'); ?></p>
-                </div>
-                <div class="right-sidebar-toggle" style="display: flex; align-items: center;">
-                    <i class="fa fa-bell" style="margin-right: 20px; font-size: 30px; position: relative; top: -20px;"></i>
-                    <div style="position: relative; display: inline-block;">
-                        <i class="fa fa-cog" id="settingsIcon" style="margin-right: 20px; font-size: 30px; position: relative; top: -20px; cursor: pointer;"></i>
-                        <div id="logoutMenu" style="display: none; position: absolute; top: 20px; right: 0; background: white; border: 1px solid #ccc; border-radius: 5px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);">
-                            <a href="logout.php" style="display: block; padding: 8px 20px; text-decoration: none; color: black; white-space: nowrap; position: relative; top: -3px;">Log out</a>
-                        </div>
-                    </div>
-                    <div>
-                        <i class="fa fa-user-circle" style="font-size: 40px; cursor: pointer; position: relative; top: -20px;" onclick="toggleRightSidebar()"></i>
-                    </div>
-                </div>
+            <div>
+                <h1>Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?></h1>
+                <p><?php echo date('d F Y'); ?></p>
             </div>
         </header>
 
@@ -304,55 +292,11 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
         </div>
     </div>
 
-    <div class="right-sidebar">
-        <div style="display: flex; align-items: center; margin-bottom: 20px; margin-right: 60px;">
-            <img src="../images/PFP.jpg" alt="User Image" style="width: 60px; height: 57px; border-radius: 50%; margin-right: 10px;">
-            <div>
-                <span style="font-size: 20px;">
-                    <?php echo isset($_SESSION['username']) ? htmlspecialchars($_SESSION['username']) : 'Guest'; ?>
-                </span>
-                <br>
-                <span style="font-size: 10px;">
-                    <?php echo isset($_SESSION['role']) ? htmlspecialchars($_SESSION['role']) : 'Admin'; ?>
-                </span>
-            </div>
-        </div>
-        <div style="display: flex; align-items: center; margin-bottom: 20px; flex-direction: column;">
-            <input type="text" placeholder="Search" style="display: flex; align-items: center; padding: 10px 20px; background-color: white; color: black; border: none; border-radius: 5px; width: 230px; height: 35px;">
-            <div style="margin-top: 20px;">
-                <div class="right-card" style="color: black; font-size: 20px;">To be Shipped <br> <strong style="font-size: 30px;"><?php echo htmlspecialchars($to_be_shipped); ?></strong></div>
-                <div class="right-card" style="color: black; font-size: 20px;">To be Delivered <br> <strong style="font-size: 30px;"><?php echo htmlspecialchars($to_be_delivered); ?></strong></div>
-            </div>
-        </div>
-    </div>
-
     <script>
-        function toggleRightSidebar() {
-            const rightSidebar = document.querySelector('.right-sidebar');
-            const mainContent = document.querySelector('.main-content');
-            const isOpen = rightSidebar.style.display === 'flex';
-            rightSidebar.style.display = isOpen ? 'none' : 'flex';
-            mainContent.classList.toggle('right-sidebar-open', !isOpen);
-            rightSidebar.style.overflowY = 'auto';
-        }
-
         document.querySelectorAll('.dropdown').forEach(item => {
             item.addEventListener('click', function (e) {
                 this.classList.toggle('active');
             });
-        });
-
-        const settingsIcon = document.getElementById('settingsIcon');
-        const logoutMenu = document.getElementById('logoutMenu');
-
-        settingsIcon.addEventListener('click', () => {
-            logoutMenu.style.display = logoutMenu.style.display === 'none' ? 'block' : 'none';
-        });
-
-        document.addEventListener('click', (event) => {
-            if (!settingsIcon.contains(event.target) && !logoutMenu.contains(event.target)) {
-                logoutMenu.style.display = 'none';
-            }
         });
 
         // Chart.js setup
