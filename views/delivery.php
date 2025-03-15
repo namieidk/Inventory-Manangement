@@ -4,8 +4,8 @@ include '../database/utils.php';
 session_start();
 
 $userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
-// Only log if last log was more than X seconds ago
-if (!isset($_SESSION['last_delivery_log']) || (time() - $_SESSION['last_delivery_log']) > 300) { // 300 seconds = 5 minutes
+// Only log if last log was more than 5 minutes ago
+if (!isset($_SESSION['last_delivery_log']) || (time() - $_SESSION['last_delivery_log']) > 300) {
     logAction($conn, $userId, "Accessed delivery Page", "User accessed the delivery page");
     $_SESSION['last_delivery_log'] = time();
 }
@@ -20,7 +20,7 @@ if (!$order_id) {
     die("No order ID provided.");
 }
 
-// Fetch products for the dropdown
+// Fetch products for reference (but we'll prioritize SupplierOrderItems)
 try {
     $stmt = $conn->prepare("SELECT id, product_name, price FROM products WHERE status = 'active'");
     $stmt->execute();
@@ -45,7 +45,23 @@ try {
     }
 }
 
-// Fetch existing delivery data (if it exists) or supplier order data as fallback
+// Fetch supplier order items for the given order_id
+try {
+    $supplier_items_stmt = $conn->prepare("
+        SELECT ProductName, Quantity, Rate, Amount
+        FROM SupplierOrderItems
+        WHERE OrderID = :order_id
+    ");
+    $supplier_items_stmt->execute([':order_id' => $order_id]);
+    $supplier_order_items = $supplier_items_stmt->fetchAll(PDO::FETCH_ASSOC);
+    if (empty($supplier_order_items)) {
+        die("No items found in Supplier Order for OrderID: " . htmlspecialchars($order_id));
+    }
+} catch (PDOException $e) {
+    die("Error fetching supplier order items: " . $e->getMessage());
+}
+
+// Fetch existing delivery data or supplier order data as fallback
 try {
     $stmt = $conn->prepare("
         SELECT DeliveryID, SupplierName, OrderDate, TIN, DeliveryDate, PaymentTerms, SubTotal, Discount, Total, Status
@@ -56,7 +72,6 @@ try {
     $delivery = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$delivery) {
-        // Fallback to SupplierOrders if no delivery exists yet
         $stmt = $conn->prepare("
             SELECT SupplierName, OrderDate, TIN, DeliveryDate, PaymentTerms, SubTotal, Discount, Total, Status
             FROM SupplierOrders
@@ -65,34 +80,28 @@ try {
         $stmt->execute([':order_id' => $order_id]);
         $delivery = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$delivery) {
-            die("Order not found.");
+            die("Order not found in SupplierOrders.");
         }
     }
 
     $delivery_id = $delivery['DeliveryID'] ?? null;
-    $stmt = $conn->prepare("
-        SELECT ProductName, Quantity, Rate, Amount
-        FROM DeliveryItems
-        WHERE DeliveryID = :delivery_id
-    ");
-    $stmt->execute([':delivery_id' => $delivery_id]);
-    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    if (empty($items) && !$delivery_id) {
-        // Fallback to SupplierOrderItems if no delivery items exist
+    if ($delivery_id) {
         $stmt = $conn->prepare("
             SELECT ProductName, Quantity, Rate, Amount
-            FROM SupplierOrderItems
-            WHERE OrderID = :order_id
+            FROM DeliveryItems
+            WHERE DeliveryID = :delivery_id
         ");
-        $stmt->execute([':order_id' => $order_id]);
+        $stmt->execute([':delivery_id' => $delivery_id]);
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        // If no delivery exists yet, use supplier order items as the initial items
+        $items = $supplier_order_items;
     }
 } catch (PDOException $e) {
     die("Error fetching delivery/order details: " . $e->getMessage());
 }
 
-// Handle form submission for updating/creating delivery
+// Handle form submission
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
     if (!isset($conn) || !$conn) {
         die("Database connection not established.");
@@ -116,17 +125,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         }
 
         if ($delivery_id) {
-            // Update existing delivery
             $sql = "UPDATE Deliveries 
                     SET SupplierName = ?, OrderDate = ?, TIN = ?, DeliveryDate = ?, PaymentTerms = ?, SubTotal = ?, Discount = ?, Total = ?, Status = ?
                     WHERE DeliveryID = ?";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$supplier_name, $order_date, $tin, $delivery_date, $payment_terms, $sub_total, $discount_percent, $total, $status, $delivery_id]);
-
-            // Delete existing items
             $conn->prepare("DELETE FROM DeliveryItems WHERE DeliveryID = ?")->execute([$delivery_id]);
         } else {
-            // Insert new delivery
             $sql = "INSERT INTO Deliveries (OrderID, SupplierName, OrderDate, TIN, DeliveryDate, PaymentTerms, SubTotal, Discount, Total, Status) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $conn->prepare($sql);
@@ -134,7 +139,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
             $delivery_id = $conn->lastInsertId();
         }
 
-        // Insert items
         if (isset($_POST['items']) && is_array($_POST['items'])) {
             $item_sql = "INSERT INTO DeliveryItems (DeliveryID, ProductName, Quantity, Rate, Amount) 
                          VALUES (?, ?, ?, ?, ?)";
@@ -174,34 +178,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <style>
-        .item-table th {
-            padding: 4px;
-            vertical-align: middle;
-            text-align: left;
-        }
-        .item-table td {
+        .item-table th, .item-table td {
             padding: 6px;
             vertical-align: middle;
             text-align: left;
         }
-        .item-table select,
-        .item-table input[type="number"] {
-            width: 80%;
-            margin: 0;
+        .item-table select, .item-table input[type="number"] {
+            width: 100%;
             padding: 4px;
-        }
-        .item-table .product-name {
-            min-width: 200px;
-        }
-        .item-table .quantity {
-            min-width: 80px;
-        }
-        .item-table .rate,
-        .item-table .amount {
-            min-width: 150px;
-        }
-        .item-table .btn-sm {
-            padding: 2px 6px;
         }
         .table-container {
             overflow-x: hidden;
@@ -266,12 +250,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
             </ul>
         </li>
         <li class="dropdown">
-    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span><i class="fa fa-chevron-down toggle-btn"></i>
-    <ul class="submenu">
-        <li><a href="Reports.php" style="color: white; text-decoration: none;">Sales</a></li>
-        <li><a href="InventoryReports.php" style="color: white; text-decoration: none;">Inventory</a></li>
-    </ul>
-</li>
+            <i class="fas fa-file-invoice-dollar"></i><span> Reports</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="Reports.php" style="color: white; text-decoration: none;">Sales</a></li>
+                <li><a href="InventoryReports.php" style="color: white; text-decoration: none;">Inventory</a></li>
+            </ul>
+        </li>
         <li>
             <a href="logout.php" style="text-decoration: none; color: inherit;">
                 <i class="fas fa-sign-out-alt"></i><span> Log out</span>
@@ -329,7 +313,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
                 <thead>
                     <tr>
                         <th>Product Name</th>
-                        <th style="margin-left: -10px;">Quantity</th>
+                        <th>Quantity</th>
                         <th>Unit Cost</th>
                         <th>Amount</th>
                         <th>Action</th>
@@ -361,8 +345,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         </div>
     </form>
 </div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Sidebar toggle functionality
     document.querySelectorAll('.toggle-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const dropdown = btn.closest('.dropdown');
@@ -370,33 +356,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    const settingsIcon = document.getElementById('settingsIcon');
-    const logoutMenu = document.getElementById('logoutMenu');
-    const lightModeBtn = document.getElementById('lightModeBtn');
-    const darkModeBtn = document.getElementById('darkModeBtn');
-
-    settingsIcon.addEventListener('click', () => {
-        logoutMenu.style.display = logoutMenu.style.display === 'none' ? 'block' : 'none';
-    });
-
-    document.addEventListener('click', (event) => {
-        if (!settingsIcon.contains(event.target) && !logoutMenu.contains(event.target)) {
-            logoutMenu.style.display = 'none';
-        }
-    });
-
-    lightModeBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        document.body.classList.remove('dark-mode');
-        logoutMenu.style.display = 'none';
-    });
-
-    darkModeBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        document.body.classList.add('dark-mode');
-        logoutMenu.style.display = 'none';
-    });
-
+    // Element references
     const itemTableBody = document.getElementById('itemTableBody');
     const addOrderBtn = document.getElementById('addOrderBtn');
     const subTotalSpan = document.getElementById('subTotal');
@@ -406,47 +366,24 @@ document.addEventListener('DOMContentLoaded', function() {
     const totalInput = document.getElementById('totalInput');
     let rowId = 0;
 
+    // Product data
     const products = <?php echo json_encode($products); ?>;
     const existingItems = <?php echo json_encode($items); ?>;
-    
-    let productOptions = '<option value="">Select Product</option>';
-    products.forEach(product => {
-        productOptions += `<option value="${product.product_name}" data-price="${product.price}">${product.product_name}</option>`;
+    const supplierOrderItems = <?php echo json_encode($supplier_order_items); ?>;
+
+    // Generate product options limited to supplier order items
+    let productOptions = '';
+    supplierOrderItems.forEach(item => {
+        const price = products.find(p => p.product_name === item.ProductName)?.price || item.Rate;
+        productOptions += `<option value="${item.ProductName}" data-price="${price}">${item.ProductName}</option>`;
     });
 
     const productPrices = {};
-    products.forEach(product => {
-        productPrices[product.product_name] = parseFloat(product.price);
+    supplierOrderItems.forEach(item => {
+        productPrices[item.ProductName] = parseFloat(products.find(p => p.product_name === item.ProductName)?.price || item.Rate);
     });
 
-    // Populate existing items
-    existingItems.forEach((item, index) => {
-        rowId++;
-        const newRow = document.createElement('tr');
-        let productOptionExists = products.some(p => p.product_name === item.ProductName);
-        let selectedOption = productOptionExists 
-            ? `<option value="${item.ProductName}" data-price="${productPrices[item.ProductName] || 0}" selected>${item.ProductName}</option>`
-            : `<option value="${item.ProductName}" selected>${item.ProductName} (Inactive)</option>`;
-
-        newRow.innerHTML = `
-            <td>
-                <select class="form-control product-name" name="items[${rowId}][product_name]" required>
-                    ${productOptions}
-                    ${!productOptionExists ? selectedOption : ''}
-                </select>
-            </td>
-            <td><input type="number" class="form-control quantity" name="items[${rowId}][quantity]" min="1" value="${item.Quantity}" required></td>
-            <td><input type="number" class="form-control rate" name="items[${rowId}][rate]" style="width: 70px;" min="0" step="0.01" value="${item.Rate}" readonly></td>
-            <td><input type="number" class="form-control amount" name="items[${rowId}][amount]" style="width: 70px;" value="${item.Amount}" readonly></td>
-            <td><button type="button" class="btn btn-danger btn-sm remove-row">Remove</button></td>
-        `;
-        itemTableBody.appendChild(newRow);
-
-        const productSelect = newRow.querySelector('.product-name');
-        productSelect.value = item.ProductName;
-        setupRowListeners(newRow);
-    });
-
+    // Function to calculate totals
     function updateTotals() {
         let subTotal = 0;
         document.querySelectorAll('.amount').forEach(amountInput => {
@@ -463,6 +400,7 @@ document.addEventListener('DOMContentLoaded', function() {
         totalInput.value = total.toFixed(2);
     }
 
+    // Function to set up row event listeners
     function setupRowListeners(row) {
         const productSelect = row.querySelector('.product-name');
         const quantityInput = row.querySelector('.quantity');
@@ -492,30 +430,86 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    addOrderBtn.addEventListener('click', function() {
+    // Populate item table with all supplier order items initially (or delivery items if they exist)
+    existingItems.forEach((item, index) => {
         rowId++;
         const newRow = document.createElement('tr');
+        const productOptionExists = supplierOrderItems.some(p => p.ProductName === item.ProductName);
+        const selectedOption = productOptionExists 
+            ? `<option value="${item.ProductName}" data-price="${productPrices[item.ProductName] || 0}" selected>${item.ProductName}</option>`
+            : `<option value="${item.ProductName}" selected>${item.ProductName} (Not in Supplier Order)</option>`;
+
         newRow.innerHTML = `
             <td>
                 <select class="form-control product-name" name="items[${rowId}][product_name]" required>
                     ${productOptions}
+                    ${!productOptionExists ? selectedOption : ''}
                 </select>
             </td>
-            <td><input type="number" class="form-control quantity" name="items[${rowId}][quantity]" min="1" required></td>
-            <td><input type="number" class="form-control rate" name="items[${rowId}][rate]" style="width: 70px;" min="0" step="0.01" readonly></td>
-            <td><input type="number" class="form-control amount" name="items[${rowId}][amount]" style="width: 70px;" readonly></td>
+            <td><input type="number" class="form-control quantity" name="items[${rowId}][quantity]" min="1" value="${item.Quantity}" required></td>
+            <td><input type="number" class="form-control rate" name="items[${rowId}][rate]" min="0" step="0.01" value="${item.Rate}" readonly></td>
+            <td><input type="number" class="form-control amount" name="items[${rowId}][amount]" value="${item.Amount}" readonly></td>
             <td><button type="button" class="btn btn-danger btn-sm remove-row">Remove</button></td>
         `;
         itemTableBody.appendChild(newRow);
         setupRowListeners(newRow);
     });
 
+    // Add new item functionality with next available product from SupplierOrderItems
+    let supplierItemIndex = 0;
+    function addNewItem() {
+        try {
+            if (supplierOrderItems.length === 0) {
+                console.error('No items found in Supplier Order Details for this order');
+                return;
+            }
+
+            rowId++;
+            // Get the next supplier order item
+            const defaultSupplierItem = supplierOrderItems[supplierItemIndex % supplierOrderItems.length];
+            const defaultPrice = productPrices[defaultSupplierItem.ProductName] || defaultSupplierItem.Rate;
+
+            const newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td>
+                    <select class="form-control product-name" name="items[${rowId}][product_name]" required>
+                        ${productOptions}
+                    </select>
+                </td>
+                <td><input type="number" class="form-control quantity" name="items[${rowId}][quantity]" min="1" value="${defaultSupplierItem.Quantity}" required></td>
+                <td><input type="number" class="form-control rate" name="items[${rowId}][rate]" min="0" step="0.01" value="${defaultSupplierItem.Rate}" readonly></td>
+                <td><input type="number" class="form-control amount" name="items[${rowId}][amount]" value="${defaultSupplierItem.Amount}" readonly></td>
+                <td><button type="button" class="btn btn-danger btn-sm remove-row">Remove</button></td>
+            `;
+            itemTableBody.appendChild(newRow);
+
+            // Set the default product and trigger change event
+            const productSelect = newRow.querySelector('.product-name');
+            productSelect.value = defaultSupplierItem.ProductName;
+            setupRowListeners(newRow);
+            productSelect.dispatchEvent(new Event('change')); // Trigger change to update rate
+            supplierItemIndex++; // Move to next item
+        } catch (error) {
+            console.error('Error adding new item:', error);
+        }
+    }
+
+    // Add event listener to Add Item button
+    if (addOrderBtn) {
+        addOrderBtn.addEventListener('click', addNewItem);
+    } else {
+        console.error('Add Item button not found');
+    }
+
+    // Discount change handler
     discountPercentInput.addEventListener('input', updateTotals);
 
+    // Cancel button handler
     document.getElementById('cancelBtn').addEventListener('click', function() {
-        window.location.href = 'deliverytable.php';
+        window.location.href = 'SupplierOrder.php';
     });
 
+    // Initial totals calculation
     updateTotals();
 });
 </script>

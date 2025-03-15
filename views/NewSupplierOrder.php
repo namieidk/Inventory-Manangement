@@ -4,11 +4,12 @@ include '../database/utils.php';
 session_start();
 
 $userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : null;
-// Only log if last log was more than X seconds ago
-if (!isset($_SESSION['last_NewSupplierOrder_log']) || (time() - $_SESSION['last_NewSupplierOrder_log']) > 300) { // 300 seconds = 5 minutes
+// Only log if last log was more than 5 minutes ago
+if (!isset($_SESSION['last_NewSupplierOrder_log']) || (time() - $_SESSION['last_NewSupplierOrder_log']) > 300) {
     logAction($conn, $userId, "Accessed New Supplier Order Page", "User accessed the New Supplier Order page");
     $_SESSION['last_NewSupplierOrder_log'] = time();
 }
+
 // Fetch products for the dropdown
 try {
     $stmt = $conn->prepare("SELECT id, product_name, price FROM products WHERE status = 'active'");
@@ -18,13 +19,12 @@ try {
     die("Error fetching products: " . $e->getMessage());
 }
 
-// Fetch suppliers (assuming a suppliers table exists)
+// Fetch suppliers
 try {
     $supplier_stmt = $conn->prepare("SELECT name FROM suppliers ORDER BY name ASC");
     $supplier_stmt->execute();
     $suppliers = $supplier_stmt->fetchAll(PDO::FETCH_COLUMN);
 } catch (PDOException $e) {
-    // Fallback to distinct SupplierName from SupplierOrders if no suppliers table
     try {
         $supplier_stmt = $conn->prepare("SELECT DISTINCT SupplierName FROM SupplierOrders WHERE SupplierName IS NOT NULL AND SupplierName != '' ORDER BY SupplierName ASC");
         $supplier_stmt->execute();
@@ -35,7 +35,6 @@ try {
     }
 }
 
-// Set current date for default value
 $current_date = date('Y-m-d');
 
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
@@ -114,34 +113,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <style>
-        .item-table th {
-            padding: 4px;
-            vertical-align: middle;
-            text-align: left;
-        }
-        .item-table td {
+        .item-table th, .item-table td {
             padding: 6px;
             vertical-align: middle;
             text-align: left;
         }
-        .item-table select,
-        .item-table input[type="number"] {
-            width: 80%;
-            margin: 0;
+        .item-table select, .item-table input[type="number"] {
+            width: 100%;
             padding: 4px;
-        }
-        .item-table .product-name {
-            min-width: 200px;
-        }
-        .item-table .quantity {
-            min-width: 80px;
-        }
-        .item-table .rate,
-        .item-table .amount {
-            min-width: 150px;
-        }
-        .item-table .btn-sm {
-            padding: 2px 6px;
         }
         .table-container {
             overflow-x: hidden;
@@ -256,7 +235,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
                 <thead>
                     <tr>
                         <th>Product Name</th>
-                        <th style="margin-left: -10px;">Quantity</th>
+                        <th>Quantity</th>
                         <th>Unit Cost</th>
                         <th>Amount</th>
                         <th>Action</th>
@@ -288,8 +267,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         </div>
     </form>
 </div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Sidebar toggle functionality
     document.querySelectorAll('.toggle-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const dropdown = btn.closest('.dropdown');
@@ -297,33 +278,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    const settingsIcon = document.getElementById('settingsIcon');
-    const logoutMenu = document.getElementById('logoutMenu');
-    const lightModeBtn = document.getElementById('lightModeBtn');
-    const darkModeBtn = document.getElementById('darkModeBtn');
-
-    settingsIcon.addEventListener('click', () => {
-        logoutMenu.style.display = logoutMenu.style.display === 'none' ? 'block' : 'none';
-    });
-
-    document.addEventListener('click', (event) => {
-        if (!settingsIcon.contains(event.target) && !logoutMenu.contains(event.target)) {
-            logoutMenu.style.display = 'none';
-        }
-    });
-
-    lightModeBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        document.body.classList.remove('dark-mode');
-        logoutMenu.style.display = 'none';
-    });
-
-    darkModeBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        document.body.classList.add('dark-mode');
-        logoutMenu.style.display = 'none';
-    });
-
+    // Element references
     const itemTableBody = document.getElementById('itemTableBody');
     const addOrderBtn = document.getElementById('addOrderBtn');
     const subTotalSpan = document.getElementById('subTotal');
@@ -331,9 +286,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const totalSpan = document.getElementById('total');
     const subTotalInput = document.getElementById('subTotalInput');
     const totalInput = document.getElementById('totalInput');
+    
+    // Product data
+    const products = <?php echo json_encode($products); ?>;
     let rowCount = 0;
 
-    const products = <?php echo json_encode($products); ?>;
+    // Generate product options
     let productOptions = '<option value="">Select Product</option>';
     products.forEach(product => {
         productOptions += `<option value="${product.product_name}" data-price="${product.price}">${product.product_name}</option>`;
@@ -344,6 +302,7 @@ document.addEventListener('DOMContentLoaded', function() {
         productPrices[product.product_name] = parseFloat(product.price);
     });
 
+    // Calculate totals
     function updateTotals() {
         let subTotal = 0;
         document.querySelectorAll('.amount').forEach(amountInput => {
@@ -360,52 +319,70 @@ document.addEventListener('DOMContentLoaded', function() {
         totalInput.value = total.toFixed(2);
     }
 
-    addOrderBtn.addEventListener('click', function() {
-        rowCount++;
-        const newRow = document.createElement('tr');
-        newRow.innerHTML = `
-            <td>
-                <select class="form-control product-name" name="items[${rowCount}][product_name]" required>
-                    ${productOptions}
-                </select>
-            </td>
-            <td><input type="number" class="form-control quantity" name="items[${rowCount}][quantity]" min="1" required></td>
-            <td><input type="number" class="form-control rate" name="items[${rowCount}][rate]" style="width: 70px;" min="0" step="0.01" readonly></td>
-            <td><input type="number" class="form-control amount" name="items[${rowCount}][amount]" style="width: 70px;" readonly></td>
-            <td><button type="button" class="btn btn-danger btn-sm remove-row">Remove</button></td>
-        `;
-        itemTableBody.appendChild(newRow);
+    // Add new order row
+    function addNewRow() {
+        try {
+            rowCount++;
+            const newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td>
+                    <select class="form-control product-name" name="items[${rowCount}][product_name]" required>
+                        ${productOptions}
+                    </select>
+                </td>
+                <td><input type="number" class="form-control quantity" name="items[${rowCount}][quantity]" min="1" required></td>
+                <td><input type="number" class="form-control rate" name="items[${rowCount}][rate]" min="0" step="0.01" readonly></td>
+                <td><input type="number" class="form-control amount" name="items[${rowCount}][amount]" readonly></td>
+                <td><button type="button" class="btn btn-danger btn-sm remove-row">Remove</button></td>
+            `;
+            
+            itemTableBody.appendChild(newRow);
 
-        const productSelect = newRow.querySelector('.product-name');
-        const quantityInput = newRow.querySelector('.quantity');
-        const rateInput = newRow.querySelector('.rate');
-        const amountInput = newRow.querySelector('.amount');
-        const removeBtn = newRow.querySelector('.remove-row');
+            // Get row elements
+            const productSelect = newRow.querySelector('.product-name');
+            const quantityInput = newRow.querySelector('.quantity');
+            const rateInput = newRow.querySelector('.rate');
+            const amountInput = newRow.querySelector('.amount');
+            const removeBtn = newRow.querySelector('.remove-row');
 
-        function calculateAmount() {
-            const quantity = parseInt(quantityInput.value) || 0;
-            const rate = parseFloat(rateInput.value) || 0;
-            const amount = quantity * rate;
-            amountInput.value = amount.toFixed(2);
-            updateTotals();
+            // Calculate amount for this row
+            function calculateAmount() {
+                const quantity = parseInt(quantityInput.value) || 0;
+                const rate = parseFloat(rateInput.value) || 0;
+                const amount = quantity * rate;
+                amountInput.value = amount.toFixed(2);
+                updateTotals();
+            }
+
+            // Event listeners
+            productSelect.addEventListener('change', function() {
+                const productName = this.value;
+                const price = productPrices[productName] || 0;
+                rateInput.value = price.toFixed(2);
+                calculateAmount();
+            });
+
+            quantityInput.addEventListener('input', calculateAmount);
+            removeBtn.addEventListener('click', function() {
+                newRow.remove();
+                updateTotals();
+            });
+        } catch (error) {
+            console.error('Error adding new row:', error);
         }
+    }
 
-        productSelect.addEventListener('change', function() {
-            const productName = this.value;
-            const price = productPrices[productName] || 0;
-            rateInput.value = price.toFixed(2);
-            calculateAmount();
-        });
+    // Add order button click handler
+    if (addOrderBtn) {
+        addOrderBtn.addEventListener('click', addNewRow);
+    } else {
+        console.error('Add Order button not found');
+    }
 
-        quantityInput.addEventListener('input', calculateAmount);
-        removeBtn.addEventListener('click', function() {
-            newRow.remove();
-            updateTotals();
-        });
-    });
-
+    // Discount change handler
     discountPercentInput.addEventListener('input', updateTotals);
 
+    // Cancel button handler
     document.getElementById('cancelBtn').addEventListener('click', function() {
         if (confirm('Are you sure you want to cancel? All unsaved changes will be lost.')) {
             document.getElementById('supplierOrderForm').reset();
@@ -418,7 +395,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Initial call to set totals to 0
+    // Initial totals
     updateTotals();
 });
 </script>

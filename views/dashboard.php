@@ -12,8 +12,8 @@ if (!isset($_SESSION['username'])) {
 }
 
 // Get start and end of the current week (Monday to Sunday)
-$start_of_week = date('Y-m-d', strtotime('monday this week'));
-$end_of_week = date('Y-m-d', strtotime('sunday this week'));
+$start_of_week = date('Y-m-d 00:00:00', strtotime('monday this week')); // Start at midnight
+$end_of_week = date('Y-m-d 23:59:59', strtotime('sunday this week'));   // End at 11:59:59 PM
 
 // Fetch Total Sales for the current week
 try {
@@ -185,6 +185,7 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
         }
     </style>
 </head>
+<body>
 <div class="left-sidebar">
     <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
     <ul class="menu">
@@ -215,12 +216,12 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
             </ul>
         </li>
         <li class="dropdown">
-    <i class="fas fa-file-invoice-dollar"></i><span> Reports</span><i class="fa fa-chevron-down toggle-btn"></i>
-    <ul class="submenu">
-        <li><a href="Reports.php" style="color: white; text-decoration: none;">Sales</a></li>
-        <li><a href="InventoryReports.php" style="color: white; text-decoration: none;">Inventory</a></li>
-    </ul>
-</li>
+            <i class="fas fa-file-invoice-dollar"></i><span> Reports</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="Reports.php" style="color: white; text-decoration: none;">Sales</a></li>
+                <li><a href="InventoryReports.php" style="color: white; text-decoration: none;">Inventory</a></li>
+            </ul>
+        </li>
         <li>
             <a href="logout.php" style="text-decoration: none; color: inherit;">
                 <i class="fas fa-sign-out-alt"></i><span> Log out</span>
@@ -229,122 +230,127 @@ for ($week_start = strtotime($start_of_month); $week_start <= strtotime($end_of_
     </ul>
 </div>
 
-
-    <div class="main-content">
-        <header>
-            <div>
-                <h1>Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?></h1>
-                <p><?php echo date('d F Y'); ?></p>
-            </div>
-        </header>
-
-        <div class="cards">
-            <div class="card">Total Sales (This Week) <br> <strong>₱<?php echo is_numeric($total_sales) ? number_format($total_sales, 2) : $total_sales; ?></strong></div>
-            <div class="card">Total Order <br> <strong><?php echo htmlspecialchars($total_orders); ?></strong></div>
-            <div class="card">Total Customer <br> <strong><?php echo htmlspecialchars($total_customers); ?></strong></div>
+<div class="main-content">
+    <header>
+        <div>
+            <h1>Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?></h1>
+            <p><?php echo date('d F Y'); ?></p>
         </div>
+    </header>
 
-        <div class="graph-container">
-            <button id="toggleGraphBtn" class="btn btn-primary">Switch to Weekly</button>
-            <canvas id="salesChart"></canvas>
-        </div>
-
-        <div class="recent-orders">
-            <h3>Recent Orders</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Order ID</th>
-                        <th>Date</th>
-                        <th>Product</th>
-                        <th>Customer</th>
-                        <th>Total Amount</th>
-                        <th>Status</th>
-                        <th>Payment</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (isset($recent_orders['error'])): ?>
-                        <tr><td colspan="7" class="text-center text-danger"><?php echo htmlspecialchars($recent_orders['error']); ?></td></tr>
-                    <?php elseif (!empty($recent_orders)): ?>
-                        <?php foreach ($recent_orders as $order): ?>
-                            <tr>
-                                <td><?php echo htmlspecialchars($order['OrderID']); ?></td>
-                                <td><?php echo htmlspecialchars(date('d M Y', strtotime($order['OrderDate']))); ?></td>
-                                <td><?php echo htmlspecialchars($order['ProductName'] ?? 'N/A'); ?></td>
-                                <td><?php echo htmlspecialchars($order['CustomerName']); ?></td>
-                                <td>₱<?php echo number_format($order['Total'], 2); ?></td>
-                                <td><?php echo htmlspecialchars($order['Status']); ?></td>
-                                <td><?php echo htmlspecialchars($order['PaymentTerms'] ?? 'N/A'); ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr><td colspan="7" class="text-center text-muted">No order yet. Add new order.</td></tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="inventory-summary">
-            <h3>Inventory Summary</h3>
-            <p>Quantity on hand: <strong><?php echo htmlspecialchars($quantity_on_hand); ?></strong></p>
-            <p>Quantity to be received: <strong><?php echo htmlspecialchars($quantity_to_receive); ?></strong></p>
-        </div>
+    <div class="cards">
+        <div class="card">Total Sales (This Week) <br> <strong>₱<?php echo is_numeric($total_sales) ? number_format($total_sales, 2) : $total_sales; ?></strong></div>
+        <div class="card">Total Order <br> <strong><?php echo htmlspecialchars($total_orders); ?></strong></div>
+        <div class="card">Total Customer <br> <strong><?php echo htmlspecialchars($total_customers); ?></strong></div>
     </div>
 
-    <script>
-        document.querySelectorAll('.dropdown').forEach(item => {
-            item.addEventListener('click', function (e) {
-                this.classList.toggle('active');
-            });
-        });
+    <div class="graph-container">
+        <button id="toggleGraphBtn" class="btn btn-primary">Switch to Weekly</button>
+        <canvas id="salesChart"></canvas>
+    </div>
 
-        // Chart.js setup
-        const dailySalesData = <?php echo json_encode($daily_sales); ?>;
-        const weeklySalesData = <?php echo json_encode($weekly_sales); ?>;
+    <div class="recent-orders">
+        <h3>Recent Orders</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Date</th>
+                    <th>Product</th>
+                    <th>Customer</th>
+                    <th>Total Amount</th>
+                    <th>Status</th>
+                    <th>Payment</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (isset($recent_orders['error'])): ?>
+                    <tr><td colspan="7" class="text-center text-danger"><?php echo htmlspecialchars($recent_orders['error']); ?></td></tr>
+                <?php elseif (!empty($recent_orders)): ?>
+                    <?php foreach ($recent_orders as $order): ?>
+                        <tr>
+                            <td><?php echo htmlspecialchars($order['OrderID']); ?></td>
+                            <td><?php echo htmlspecialchars(date('d M Y', strtotime($order['OrderDate']))); ?></td>
+                            <td><?php echo htmlspecialchars($order['ProductName'] ?? 'N/A'); ?></td>
+                            <td><?php echo htmlspecialchars($order['CustomerName']); ?></td>
+                            <td>₱<?php echo number_format($order['Total'], 2); ?></td>
+                            <td><?php echo htmlspecialchars($order['Status']); ?></td>
+                            <td><?php echo htmlspecialchars($order['PaymentTerms'] ?? 'N/A'); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <tr><td colspan="7" class="text-center text-muted">No order yet. Add new order.</td></tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
 
-        const ctx = document.getElementById('salesChart').getContext('2d');
-        const salesChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: Object.keys(dailySalesData).map(date => new Date(date).toLocaleDateString('en-US', { weekday: 'short' })),
-                datasets: [{
-                    label: 'Daily Sales',
-                    data: Object.values(dailySalesData),
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                    fill: true,
-                    tension: 0.1
-                }]
-            },
-            options: {
-                scales: {
-                    y: { beginAtZero: true, title: { display: true, text: 'Sales (₱)' } },
-                    x: { title: { display: true, text: 'Day' } }
-                }
-            }
-        });
+    <div class="inventory-summary">
+        <h3>Inventory Summary</h3>
+        <p>Quantity on hand: <strong><?php echo htmlspecialchars($quantity_on_hand); ?></strong></p>
+        <p>Quantity to be received: <strong><?php echo htmlspecialchars($quantity_to_receive); ?></strong></p>
+    </div>
+</div>
 
-        const toggleGraphBtn = document.getElementById('toggleGraphBtn');
-        let showingDaily = true;
+<script>
+document.querySelectorAll('.dropdown').forEach(item => {
+    item.addEventListener('click', function (e) {
+        this.classList.toggle('active');
+    });
+});
 
-        toggleGraphBtn.addEventListener('click', () => {
-            if (showingDaily) {
-                salesChart.data.labels = Object.keys(weeklySalesData);
-                salesChart.data.datasets[0].label = 'Weekly Sales';
-                salesChart.data.datasets[0].data = Object.values(weeklySalesData);
-                salesChart.options.scales.x.title.text = 'Week';
-                toggleGraphBtn.textContent = 'Switch to Daily';
-            } else {
-                salesChart.data.labels = Object.keys(dailySalesData).map(date => new Date(date).toLocaleDateString('en-US', { weekday: 'short' }));
-                salesChart.data.datasets[0].label = 'Daily Sales';
-                salesChart.data.datasets[0].data = Object.values(dailySalesData);
-                salesChart.options.scales.x.title.text = 'Day';
-                toggleGraphBtn.textContent = 'Switch to Weekly';
-            }
-            showingDaily = !showingDaily;
-            salesChart.update();
-        });
-    </script>
+// Chart.js setup
+const dailySalesData = <?php echo json_encode($daily_sales); ?>;
+const weeklySalesData = <?php echo json_encode($weekly_sales); ?>;
+
+// Debug data
+console.log('Daily Sales Data:', dailySalesData);
+console.log('Weekly Sales Data:', weeklySalesData);
+console.log('Start of Week:', '<?php echo $start_of_week; ?>');
+console.log('End of Week:', '<?php echo $end_of_week; ?>');
+
+const ctx = document.getElementById('salesChart').getContext('2d');
+const salesChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: Object.keys(dailySalesData).map(date => new Date(date).toLocaleDateString('en-US', { weekday: 'short' })),
+        datasets: [{
+            label: 'Daily Sales',
+            data: Object.values(dailySalesData),
+            borderColor: 'rgba(75, 192, 192, 1)',
+            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+            fill: true,
+            tension: 0.1
+        }]
+    },
+    options: {
+        scales: {
+            y: { beginAtZero: true, title: { display: true, text: 'Sales (₱)' } },
+            x: { title: { display: true, text: 'Day' } }
+        }
+    }
+});
+
+const toggleGraphBtn = document.getElementById('toggleGraphBtn');
+let showingDaily = true;
+
+toggleGraphBtn.addEventListener('click', () => {
+    if (showingDaily) {
+        salesChart.data.labels = Object.keys(weeklySalesData);
+        salesChart.data.datasets[0].label = 'Weekly Sales';
+        salesChart.data.datasets[0].data = Object.values(weeklySalesData);
+        salesChart.options.scales.x.title.text = 'Week';
+        toggleGraphBtn.textContent = 'Switch to Daily';
+    } else {
+        salesChart.data.labels = Object.keys(dailySalesData).map(date => new Date(date).toLocaleDateString('en-US', { weekday: 'short' }));
+        salesChart.data.datasets[0].label = 'Daily Sales';
+        salesChart.data.datasets[0].data = Object.values(dailySalesData);
+        salesChart.options.scales.x.title.text = 'Day';
+        toggleGraphBtn.textContent = 'Switch to Weekly';
+    }
+    showingDaily = !showingDaily;
+    salesChart.update();
+});
+</script>
 </body>
 </html>
